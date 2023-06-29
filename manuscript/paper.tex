@@ -1,0 +1,140 @@
+\documentclass[preprint,12pt]{elsarticle}
+% \documentclass[draft,12pt]{elsarticle}
+
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{multirow}
+\usepackage{relsize}
+\usepackage[utf8]{inputenc}
+\usepackage{cleveref}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage[section]{placeins}
+\usepackage{booktabs}
+\usepackage{url}
+
+% For the TODOs
+\usepackage{xcolor}
+\usepackage{xargs}
+\usepackage[colorinlistoftodos,textsize=footnotesize]{todonotes}
+\newcommand{\todoin}{\todo[inline]}
+% from here: https://tex.stackexchange.com/questions/9796/how-to-add-todo-notes
+\newcommandx{\unsure}[2][1=]{\todo[linecolor=red,backgroundcolor=red!25,bordercolor=red,#1]{#2}}
+\newcommandx{\change}[2][1=]{\todo[linecolor=blue,backgroundcolor=blue!25,bordercolor=blue,#1]{#2}}
+\newcommandx{\info}[2][1=]{\todo[linecolor=OliveGreen,backgroundcolor=OliveGreen!25,bordercolor=OliveGreen,#1]{#2}}
+
+%Boldtype for greek symbols
+\newcommand{\teng}[1]{\ensuremath{\boldsymbol{#1}}}
+\newcommand{\ten}[1]{\ensuremath{\mathbf{#1}}}
+
+\usepackage{lineno}
+\linenumbers
+
+\journal{}
+
+\begin{document}
+
+\begin{frontmatter}
+
+  \title{}
+  \author[IITB]{Dinesh Adepu\corref{cor1}}
+  \ead{adepu.dinesh.a@gmail.com}
+  \author[University of Surrey]{Chuan Yu Wu}
+  \ead{xyz@com}
+\address[UoS]{Department of Aerospace Engineering, Indian Institute of
+  Technology Bombay, Powai, Mumbai 400076}
+
+\cortext[cor1]{Corresponding author}
+
+
+\begin{abstract}
+
+\end{abstract}
+
+\begin{keyword}
+%% keywords here, in the form: keyword \sep keyword
+{Elastic solids collision}, {Frictional contact}, {SPH}, {Transport Velocity Formulation}
+
+%% MSC codes here, in the form: \MSC code \sep code
+%% or \MSC[2008] code \sep code (2000 is the default)
+
+\end{keyword}
+
+\end{frontmatter}
+
+% \linenumbers
+
+\section{Introduction}
+\label{sec:intro}
+
+
+
+
+\FloatBarrier%
+\section{Conclusions}
+\label{sec:conclusions}
+
+In this paper we have demonstrated a simple approach to effectively handle the
+collision between elastic solids modeled using an updated Lagrangian SPH
+model. A contact force model is used to handle the collision between bodies. A
+surface aware spring based contact force is used to handle the collision
+between bodies. This effectively allows us to model collision and friction
+accurately. In addition this eliminates any spurious forces that are commonly
+seen with SPH when two bodies are nearby but not in actual contact. The
+contact force model utilized in the current work is sensitive towards the
+primary and the secondary body chosen. A careful analysis is carried out to
+understand which body is to be considered as primary among the colliding
+solids, and it is found that choosing the body with the highest curvature as
+the primary body gives the best results. Further, we have made our
+implementation open-source.
+
+It has been demonstrated that the current model is able to predict the post
+collision behaviour of the colliding bodies by simulating collision between
+flat, and curved interfaces in two and three dimensions. A sliding elastic
+body is simulated to test the frictional part of the contact model. Finally,
+the full scale model is applied to model the stress propagation in granular
+discs for the first time in SPH. The results compare well with those of FEM as
+well as analytical studies.
+
+A non-linear contact force model can be implemented in the future work. The
+current work can be easily extended to the modeling of collision between
+elastic and elastic-plastic bodies. Also, the collision between the bodies
+undergoing breakage can be easily captured with the current framework.
+
+\section*{References}
+
+
+\bibliographystyle{model6-num-names}
+\bibliography{references}
+\end{document}
+
+% ============================
+% Table template for reference
+% ============================
+% \begin{table}[!ht]
+%   \centering
+%   \begin{tabular}[!ht]{ll}
+%     \toprule
+%     Quantity & Values\\
+%     \midrule
+%     $L$, length of the domain & 1 m \\
+%     Time of simulation & 2.5 s \\
+%     $c_s$ & 10 m/s \\
+%     $\rho_0$, reference density & 1 kg/m\textsuperscript{3} \\
+%     Reynolds number & 200 \& 1000 \\
+%     Resolution, $L/\Delta x_{\max} : L/\Delta x_{\min}$ & $[100:200]$ \& $[150:300]$\\
+%     Smoothing length factor, $h/\Delta x$ & 1.0\\
+%     \bottomrule
+%   \end{tabular}
+%   \caption{Parameters used for the Taylor-Green vortex problem.}%
+%   \label{tab:tgv-params}
+% \end{table}
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: "paper"
+%%% fill-column: 78
+%%% End:
