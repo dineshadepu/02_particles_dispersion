@@ -1,7 +1,6 @@
-# Solute dissolution with SPH
+# Paper Title
 
-This repository contains the code and manuscript for modeling of solute dissolution
-with SPH.
+This repository contains the code and manuscript for (fill the description).
 
 
 ## Installation

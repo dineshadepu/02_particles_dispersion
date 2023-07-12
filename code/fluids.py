@@ -13,7 +13,7 @@ from pysph.examples.solid_mech.impact import add_properties
 from pysph.sph.integrator import Integrator
 
 
-def get_particle_array_fluid(x, y, z, m, h, rho, name):
+def get_particle_array_fluid(name, x, y, z=0., m=0., h=0., rho=0., ):
     pa = get_particle_array(name=name,
                             x=x,
                             y=y,
@@ -37,7 +37,7 @@ def get_particle_array_fluid(x, y, z, m, h, rho, name):
 
 def get_particle_array_boundary(constants=None, **props):
     solids_props = [
-        'wij', 'm_frac'
+        'wij', 'm_frac', 'ug', 'vf', 'uf', 'wf', 'vg', 'wg'
     ]
 
     # set wdeltap to -1. Which defaults to no self correction
@@ -149,6 +149,29 @@ class MomentumEquationPressureGradient(Equation):
         d_aw[d_idx] += tmp * DWIJ[2]
 
 
+class SolidWallNoSlipBC(Equation):
+    def __init__(self, dest, sources, nu):
+        self.nu = nu
+        super(SolidWallNoSlipBC, self).__init__(dest, sources)
+
+    def loop(self, d_idx, s_idx, d_rho, s_rho, s_m, d_au, d_av,
+             d_aw, d_u, d_v, d_w, s_ug, s_vg, s_wg, R2IJ, EPS,
+             DWIJ, XIJ):
+        etai = self.nu * d_rho[d_idx]
+        etaj = self.nu * s_rho[s_idx]
+
+        etaij = 4 * (etai * etaj)/(etai + etaj)
+
+        xdotdij = DWIJ[0]*XIJ[0] + DWIJ[1]*XIJ[1] + DWIJ[2]*XIJ[2]
+
+        tmp = s_m[s_idx]/(d_rho[d_idx] * s_rho[s_idx])
+        fac = tmp * etaij * xdotdij/(R2IJ + EPS)
+
+        d_au[d_idx] += fac * (d_u[d_idx] - s_ug[s_idx])
+        d_av[d_idx] += fac * (d_v[d_idx] - s_vg[s_idx])
+        d_aw[d_idx] += fac * (d_w[d_idx] - s_wg[s_idx])
+
+
 class FluidStep(IntegratorStep):
     def stage1(self, d_idx, d_u, d_v, d_w, d_au, d_av, d_aw, d_is_static, dt):
         dtb2 = 0.5 * dt
@@ -181,6 +204,7 @@ class FluidsScheme(Scheme):
         self.nu = nu
         self.rho0 = rho0
         self.pb = pb
+        print("pb value is", self.pb)
         self.gx = gx
         self.gy = gy
         self.gz = gz
@@ -233,11 +257,11 @@ class FluidsScheme(Scheme):
         from pysph.sph.wc.edac import (SolidWallPressureBC,
                                        ClampWallPressure,
                                        SourceNumberDensity)
+        from pysph.sph.wc.transport_velocity import (SetWallVelocity)
 
         from pysph.sph.wc.transport_velocity import (
             MomentumEquationArtificialViscosity
         )
-
 
         all = self.fluids + self.boundaries
         # =========================#
@@ -272,6 +296,12 @@ class FluidsScheme(Scheme):
         if len(self.boundaries) > 0:
             eqs = []
             for boundary in self.boundaries:
+                eqs.append(SetWallVelocity(dest=boundary, sources=self.fluids))
+            stage2.append(Group(equations=eqs, real=False))
+
+        if len(self.boundaries) > 0:
+            eqs = []
+            for boundary in self.boundaries:
                 eqs.append(
                     SourceNumberDensity(dest=boundary, sources=self.fluids))
                 eqs.append(
@@ -284,14 +314,26 @@ class FluidsScheme(Scheme):
 
         eqs = []
         for fluid in self.fluids:
-            # FIXME: Change alpha to variable
             if self.alpha > 0.:
                 eqs.append(
                     MomentumEquationArtificialViscosity(
-                        dest=fluid, sources=self.fluids, c0=self.c0,
+                        dest=fluid, sources=all, c0=self.c0,
                         alpha=self.alpha
                     )
                 )
+
+            if self.nu > 0.0:
+                eqs.append(
+                    MomentumEquationViscosity(
+                        dest=fluid, sources=self.fluids, nu=self.nu
+                    )
+                )
+                if len(self.boundaries) > 0:
+                    eqs.append(
+                        SolidWallNoSlipBC(
+                            dest=fluid, sources=self.boundaries, nu=self.nu
+                        )
+                    )
             eqs.append(
                 MomentumEquationPressureGradient(dest=fluid, sources=all,
                                                  gx=self.gx, gy=self.gy,
