@@ -25,10 +25,12 @@ from geometry import hydrostatic_tank_2d, create_circle_1
 from rigid_body import (get_particle_array_rigid_body,
                         set_linear_velocity_of_rigid_body,
                         set_angular_velocity,
-                        move_body_to_new_center,
-                        get_center_of_mass)
+)
+                        # move_body_to_new_center,
+                        # get_center_of_mass)
 from rigid_fluid_coupling import (ParticlesFluidScheme,
                                   add_rigid_fluid_properties_to_rigid_body)
+
 
 
 class PoiseuilleFlow(Application):

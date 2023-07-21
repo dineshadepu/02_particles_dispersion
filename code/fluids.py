@@ -82,7 +82,7 @@ class StateEquation(Equation):
         super(StateEquation, self).__init__(dest, sources)
 
     def initialize(self, d_idx, d_p, d_rho):
-        d_p[d_idx] = self.p0 * (d_rho[d_idx] / self.rho0 - self.b)
+        d_p[d_idx] = self.p0 * (d_rho[d_idx] / self.rho0 - self.b) + self.p0
 
 
 class DiffusionEquation(Equation):
