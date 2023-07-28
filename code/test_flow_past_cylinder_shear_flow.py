@@ -89,8 +89,8 @@ class PoiseuilleFlow(Application):
         # ======================
         # Physical properties and consants
         # ======================
-        self.fluid_rho = 1.
-        self.rigid_body_rho = 1.1
+        self.fluid_rho = 1000.
+        self.rigid_body_rho = 1000
 
         self.gx = 0.
         self.gy = 0.
@@ -114,7 +114,7 @@ class PoiseuilleFlow(Application):
         tmp = self.Umax * self.rigid_body_diameter**2. / (self.fluid_height * self.re)
         self.nu = tmp * self.fluid_rho
         print("viscosity is: ", self.nu)
-        self.tf = 10.
+        self.tf = 80.
         self.p0 = self.fluid_rho*self.c0**2
         self.alpha = 0.05
 
@@ -126,6 +126,7 @@ class PoiseuilleFlow(Application):
         print("dt viscous is: ", dt_viscous)
         print("dt force is: ", dt_force)
         self.dt = min(dt_viscous, dt_force)
+        # self.dt = min(dt_viscous, dt_force) * 1e-1
         # self.dt = 1e-4
         # self.dt = dt_viscous
         print("dt is: ", self.dt)
@@ -157,6 +158,7 @@ class PoiseuilleFlow(Application):
         xc, yc = create_circle_1(self.rigid_body_diameter, self.dx)
         xc += self.fluid_length/2.
         yc += self.fluid_height/2.
+        yc += self.fluid_height * 0.25
 
         # concatenate the top and bottom arrays
         cx = np.concatenate((tx, bx, xc))
@@ -167,8 +169,8 @@ class PoiseuilleFlow(Application):
         fluid = get_particle_array_fluid(name='fluid', x=fx, y=fy)
 
         # set velocities of the top particles of the channel
-        channel.u[channel.y > self.fluid_height / 2.] = self.Umax / 2.
-        channel.u[channel.y < self.fluid_height / 2.] = - self.Umax / 2.
+        channel.u[channel.y > max(channel.y) - self.tank_layers * self.dx] = self.Umax / 2.
+        channel.u[channel.y < min(channel.y) + self.tank_layers * self.dx] = -self.Umax / 2.
 
         print("Poiseuille flow :: Re = %g, nfluid = %d, nchannel=%d"%(
             self.re, fluid.get_number_of_particles(),

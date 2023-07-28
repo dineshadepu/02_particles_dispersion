@@ -24,7 +24,8 @@ from rigid_body import (get_particle_array_rigid_body,
                         set_linear_velocity_of_rigid_body,
                         set_angular_velocity,
                         move_body_to_new_center,
-                        get_center_of_mass)
+                        get_center_of_mass,
+                        color_diagonal_of_rb)
 from rigid_fluid_coupling import (ParticlesFluidScheme,
                                   add_rigid_fluid_properties_to_rigid_body)
 
@@ -52,7 +53,7 @@ class PoiseuilleFlow(Application):
         # Dimensions
         # ======================
         H = 0.01
-        L = 5 * H
+        L = 0.5 * H
         # x - axis
         self.fluid_length = L
         # y - axis
@@ -86,7 +87,7 @@ class PoiseuilleFlow(Application):
         # Physical properties and consants
         # ======================
         self.fluid_rho = 1.
-        self.rigid_body_rho = 1.1
+        self.rigid_body_rho = 2.1
 
         self.gx = 0.
         self.gy = 0.
@@ -208,9 +209,12 @@ class PoiseuilleFlow(Application):
         # x[:] = min(fluid.x) - min(x) + self.rigid_body_length
         # y[:] += 0.3
         # x[:] += 0.3
-        center = [self.fluid_length/3., 0.75 * self.fluid_height, 0.]
+        # center = [self.fluid_length/3., 0.75 * self.fluid_height, 0.]
+        # center = [self.fluid_length - self.rigid_body_diameter, 0.75 * self.fluid_height, 0.]
+        center = [self.fluid_length - 10. * self.dx, 0.75 * self.fluid_height, 0.]
         xcm = get_center_of_mass(x, y, z, m)
         move_body_to_new_center(xcm, x, y, z, center)
+
         rigid_body = get_particle_array_rigid_body(name='rigid_body',
                                                    x=x,
                                                    y=y,
@@ -219,6 +223,8 @@ class PoiseuilleFlow(Application):
                                                    m_rb=m,
                                                    dem_id=dem_id,
                                                    body_id=body_id)
+        color_diagonal_of_rb(rigid_body)
+        rigid_body.add_output_arrays(['color_diagonal'])
 
         # print("rigid body total mass: ", rigid_body.total_mass)
         rigid_body.rho[:] = self.fluid_rho

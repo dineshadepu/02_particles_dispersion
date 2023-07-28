@@ -391,12 +391,39 @@ def get_particle_array_rigid_body(x, y, z, m_rb, h, dem_id, body_id, name):
             # pa.add_property('wij')
 
 
+def color_diagonal_of_rb(rb):
+    x_max = max(rb.x)
+    x_min = max(rb.x)
+    rb.add_property("color_diagonal")
+    rb.color_diagonal[:] = 0.
+    rb.color_diagonal[np.where(rb.y == rb.y[np.where(rb.x == x_max)])] = 1.
+
+
 def set_total_mass(pa):
     # left limit of body i
     for i in range(max(pa.body_id) + 1):
         fltr = np.where(pa.body_id == i)
         pa.total_mass[i] = np.sum(pa.m_rb[fltr])
         assert pa.total_mass[i] > 0., "Total mass has to be greater than zero"
+
+
+def get_center_of_mass(x, y, z, m):
+    # loop over all the bodies
+    xcm = [0., 0., 0.]
+    total_mass = np.sum(m)
+    xcm[0] = np.sum(m[:] * x[:]) / total_mass
+    xcm[1] = np.sum(m[:] * y[:]) / total_mass
+    xcm[2] = np.sum(m[:] * z[:]) / total_mass
+    return xcm
+
+
+def move_body_to_new_center(xcm, x, y, z, center):
+    x_trans = center[0] - xcm[0]
+    y_trans = center[1] - xcm[1]
+    z_trans = center[2] - xcm[2]
+    x[:] += x_trans
+    y[:] += y_trans
+    z[:] += z_trans
 
 
 def set_center_of_mass(pa):
@@ -569,12 +596,17 @@ class SumUpExternalForces(Equation):
         x = declare('object')
         y = declare('object')
         z = declare('object')
+        dx0 = declare('object')
+        dy0 = declare('object')
+        dz0 = declare('object')
         xcm = declare('object')
+        R = declare('object')
         total_mass = declare('object')
         body_id = declare('object')
         j = declare('int')
         i = declare('int')
         i3 = declare('int')
+        i9 = declare('int')
 
         frc = dst.force
         trq = dst.torque
@@ -584,7 +616,11 @@ class SumUpExternalForces(Equation):
         x = dst.x
         y = dst.y
         z = dst.z
+        dx0 = dst.dx0
+        dy0 = dst.dy0
+        dz0 = dst.dz0
         xcm = dst.xcm
+        R = dst.R
         total_mass = dst.total_mass
         body_id = dst.body_id
 
@@ -594,15 +630,25 @@ class SumUpExternalForces(Equation):
         for j in range(len(x)):
             i = body_id[j]
             i3 = 3 * i
+            i9 = 9 * i
             frc[i3] += fx[j]
             frc[i3 + 1] += fy[j]
             frc[i3 + 2] += fz[j]
 
             # torque due to force on particle i
             # (r_i - com) \cross f_i
-            dx = x[j] - xcm[i3]
-            dy = y[j] - xcm[i3 + 1]
-            dz = z[j] - xcm[i3 + 2]
+
+            # get the local vector from particle to center of mass
+            dx = (R[i9 + 0] * dx0[j] + R[i9 + 1] * dy0[j] +
+                  R[i9 + 2] * dz0[j])
+            dy = (R[i9 + 3] * dx0[j] + R[i9 + 4] * dy0[j] +
+                  R[i9 + 5] * dz0[j])
+            dz = (R[i9 + 6] * dx0[j] + R[i9 + 7] * dy0[j] +
+                  R[i9 + 8] * dz0[j])
+
+            # dx = x[j] - xcm[i3]
+            # dy = y[j] - xcm[i3 + 1]
+            # dz = z[j] - xcm[i3 + 2]
 
             # torque due to force on particle i
             # dri \cross fi

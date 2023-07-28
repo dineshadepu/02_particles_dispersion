@@ -307,8 +307,8 @@ class FluidsScheme(Scheme):
                 eqs.append(
                     SolidWallPressureBC(dest=boundary, sources=self.fluids,
                                         gx=self.gx, gy=self.gy, gz=self.gz))
-                eqs.append(
-                    ClampWallPressure(dest=boundary, sources=None))
+                # eqs.append(
+                #     ClampWallPressure(dest=boundary, sources=None))
 
             stage2.append(Group(equations=eqs, real=False))
 
