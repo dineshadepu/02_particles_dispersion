@@ -266,7 +266,6 @@ def get_particle_array_rigid_body(x, y, z, m_rb, h, dem_id, body_id, name):
                                     m_rb=m_rb)
     rigid_body.add_property('dem_id', type='int', data=dem_id)
     rigid_body.add_property('body_id', type='int', data=body_id)
-    rigid_body.add_constant('total_no_bodies', 2)
 
     # forces on the particles and body frame vectors
     add_properties(rigid_body, 'fx', 'fy', 'fz', 'dx0', 'dy0', 'dz0', 'arho')
@@ -662,6 +661,64 @@ class SumUpExternalForces(Equation):
             frc[i3] += total_mass[i] * self.gx
             frc[i3 + 1] += total_mass[i] * self.gy
             frc[i3 + 2] += total_mass[i] * self.gz
+
+
+class AdjustRigidBodyPositionInPipe(Equation):
+    def __init__(self, dest, sources,
+                 x_min, x_max):
+        self.x_min = x_min
+        self.x_max = x_max
+        super(AdjustRigidBodyPositionInPipe, self).__init__(dest, sources)
+
+    def reduce(self, dst, t, dt):
+        frc = declare('object')
+        trq = declare('object')
+        fx = declare('object')
+        fy = declare('object')
+        fz = declare('object')
+        x = declare('object')
+        y = declare('object')
+        z = declare('object')
+        dx0 = declare('object')
+        dy0 = declare('object')
+        dz0 = declare('object')
+        xcm = declare('object')
+        R = declare('object')
+        total_mass = declare('object')
+        body_id = declare('object')
+        nb = declare('object')
+        j = declare('int')
+        i = declare('int')
+        i3 = declare('int')
+        i9 = declare('int')
+
+        frc = dst.force
+        trq = dst.torque
+        fx = dst.fx
+        fy = dst.fy
+        fz = dst.fz
+        nb = dst.nb
+        x = dst.x
+        y = dst.y
+        z = dst.z
+        dx0 = dst.dx0
+        dy0 = dst.dy0
+        dz0 = dst.dz0
+        xcm = dst.xcm
+        R = dst.R
+        total_mass = dst.total_mass
+        body_id = dst.body_id
+
+        for i in range(nb[0]):
+            i = body_id[j]
+            i3 = 3 * i
+            i9 = 9 * i
+            if xcm[i3] > self.x_max:
+                # recompute the center of mass based on the periodic particles
+                # of the rigid body
+                xcm[i3] = self.x_min + (xcm[i3] - self.x_max)
+            elif xcm[i3] < self.x_min:
+                xcm[i3] = self.x_max - (self.x_min - xcm[i3])
 
 
 class RigidBody3DScheme(Scheme):

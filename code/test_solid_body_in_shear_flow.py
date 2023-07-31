@@ -1,6 +1,6 @@
-"""A neutrally buoyand circular cylinder in a shear flow
+"""
 
-Section 7.1 in Hashemi 2012 paper
+
 """
 import os
 
@@ -17,7 +17,7 @@ from fluids import (get_particle_array_fluid,
                     get_particle_array_boundary,
                     FluidsScheme)
 from pysph.sph.scheme import SchemeChooser
-from pysph.sph.equation import Group, MultiStageEquations
+from pysph.sph.equation import Group, MultiStageEquations, Equation
 
 from geometry import hydrostatic_tank_2d, create_circle_1
 from rigid_body import (get_particle_array_rigid_body,
@@ -29,6 +29,16 @@ from rigid_body import (get_particle_array_rigid_body,
                         AdjustRigidBodyPositionInPipe)
 from rigid_fluid_coupling import (ParticlesFluidScheme,
                                   add_rigid_fluid_properties_to_rigid_body)
+
+
+class MoveSolidBody(Equation):
+    def __init__(self, dest, sources):
+        super(MoveSolidBody, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_x, d_y, d_z, d_u, d_v, d_w, dt):
+        d_x[d_idx] += d_u[d_idx] * dt
+        d_y[d_idx] += d_v[d_idx] * dt
+        d_z[d_idx] += d_w[d_idx] * dt
 
 
 class PoiseuilleFlow(Application):
@@ -112,7 +122,7 @@ class PoiseuilleFlow(Application):
         tmp = self.Umax * self.rigid_body_diameter**2. / (self.fluid_height * self.re)
         self.nu = tmp * self.fluid_rho
         print("viscosity is: ", self.nu)
-        self.tf = 1.
+        self.tf = 10.
         self.p0 = self.fluid_rho*self.c0**2
         self.alpha = 0.05
 
@@ -143,12 +153,8 @@ class PoiseuilleFlow(Application):
         _y = np.arange(self.dx/2, self.fluid_height, self.dx)
 
         x, y = np.meshgrid(_x, _y); fx = x.ravel(); fy = y.ravel()
-        # self.x_min = min(fx)
-        # self.x_max = max(fx)
-        self.x_min = 0.0
-        self.x_max = 0.008
-        print("x min is ", self.x_min)
-        print("x max is ", self.x_max)
+        self.x_min = min(fx)
+        self.x_max = max(fx)
         # ====================================================
         # end: properties to be used while adjusting the equations
         # ====================================================
@@ -246,6 +252,9 @@ class PoiseuilleFlow(Application):
                                                    m_rb=m,
                                                    dem_id=dem_id,
                                                    body_id=body_id)
+        rigid_body.fluid_x_max[0] = self.x_max
+        rigid_body.fluid_x_min[0] = self.x_min
+        rigid_body.radius[0] = self.rigid_body_diameter / 2.
 
         color_diagonal_of_rb(rigid_body)
         rigid_body.add_output_arrays(['color_diagonal'])
@@ -258,6 +267,7 @@ class PoiseuilleFlow(Application):
         add_rigid_fluid_properties_to_rigid_body(rigid_body)
         set_linear_velocity_of_rigid_body(rigid_body, [0.1, 0., 0.])
         rigid_body.m[:] = self.fluid_rho * self.dx**self.dim
+        rigid_body.u[:] = 0.1
         # =========================
         # create rigid body ends
         # =========================
@@ -269,10 +279,9 @@ class PoiseuilleFlow(Application):
         return DomainManager(xmin=0, xmax=self.fluid_length, periodic_in_x=True)
 
     def create_scheme(self):
-        wcsph = ParticlesFluidScheme(
+        wcsph = FluidsScheme(
             fluids=['fluid'],
-            boundaries=['channel'],
-            rigid_bodies=["rigid_body"],
+            boundaries=['channel', 'rigid_body'],
             dim=0.,
             rho0=0.,
             c0=0.,
@@ -304,10 +313,11 @@ class PoiseuilleFlow(Application):
         # Apply external force
         adjust_eqs = []
         adjust_eqs.append(
-            AdjustRigidBodyPositionInPipe(
-                "rigid_body", sources=None, x_min=self.x_min, x_max=self.x_max))
+            MoveSolidBody(
+                "rigid_body", sources=None))
 
         eqns.groups[0].append(Group(adjust_eqs))
+        # print(eqns.groups[-1])
 
         return eqns
 
