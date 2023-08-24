@@ -3,23 +3,61 @@ import matplotlib.pyplot as plt
 from pysph.tools.geometry import get_2d_block, get_2d_tank, get_3d_block
 
 
-def hydrostatic_tank_2d(fluid_length, fluid_height, tank_height, tank_layers,
-                        fluid_spacing, tank_spacing):
-    xt, yt = get_2d_tank(dx=tank_spacing,
-                         length=fluid_length + tank_spacing,
-                         height=tank_height,
-                         num_layers=tank_layers)
+def hydrostatic_tank_2d(fluid_length=1., fluid_height=2.,
+                        tank_height=2.3, tank_layers=2,
+                        fluid_spacing=0.1, tank_spacing=0.1, close=False):
     xf, yf = get_2d_block(dx=fluid_spacing,
                           length=fluid_length,
-                          height=fluid_height,
-                          center=[-1.5, 1])
+                          height=fluid_height)
 
-    xf += (np.min(xt) - np.min(xf))
-    yf -= (np.min(yf) - np.min(yt))
+    xt_4 = np.array([])
+    yt_4 = np.array([])
+    if close == False:
+        xt_1, yt_1 = get_2d_block(dx=fluid_spacing,
+                                  length=tank_layers*fluid_spacing,
+                                  height=tank_height+fluid_spacing/2.)
+        xt_1 -= max(xt_1) - min(xf) + fluid_spacing
+        yt_1 += min(yf) - min(yt_1)
 
-    # now adjust inside the tank
-    xf += tank_spacing * (tank_layers)
-    yf += tank_spacing * (tank_layers)
+        xt_2, yt_2 = get_2d_block(dx=fluid_spacing,
+                                  length=tank_layers*fluid_spacing,
+                                  height=tank_height+fluid_spacing/2.)
+        xt_2 += max(xf) - min(xt_2) + fluid_spacing
+        yt_2 += min(yf) - min(yt_2)
+
+    else:
+        xt_1, yt_1 = get_2d_block(dx=fluid_spacing,
+                                  length=tank_layers*fluid_spacing,
+                                  height=fluid_height + tank_layers * fluid_spacing)
+        xt_1 -= max(xt_1) - min(xf) + fluid_spacing
+        yt_1 += min(yf) - min(yt_1)
+
+        xt_2, yt_2 = get_2d_block(dx=fluid_spacing,
+                                  length=tank_layers*fluid_spacing,
+                                  height=fluid_height + tank_layers * fluid_spacing)
+        xt_2 += max(xf) - min(xt_2) + fluid_spacing
+        yt_2 += min(yf) - min(yt_2)
+
+        xt_3, yt_3 = get_2d_block(dx=fluid_spacing,
+                                length=max(xt_2) - min(xt_1),
+                                height=tank_layers*fluid_spacing)
+        yt_3[:] = yt_3[:] - (max(yt_3) - min(yf)) - fluid_spacing
+
+        xt_4, yt_4 = get_2d_block(dx=fluid_spacing,
+                                length=max(xt_2) - min(xt_1),
+                                height=tank_layers*fluid_spacing)
+        yt_4[:] = yt_4[:] + max(yf) - min(yt_4) + fluid_spacing
+
+    xt_3, yt_3 = get_2d_block(dx=fluid_spacing,
+                              length=max(xt_2) - min(xt_1),
+                              height=tank_layers*fluid_spacing)
+    yt_3[:] = yt_3[:] - (max(yt_3) - min(yf)) - fluid_spacing
+
+    xt = np.concatenate([xt_1, xt_2, xt_3, xt_4])
+    yt = np.concatenate([yt_1, yt_2, yt_3, yt_4])
+
+    # plt.scatter(xt_3, yt_3)
+    # plt.show()
 
     return xf, yf, xt, yt
 
@@ -172,6 +210,14 @@ def create_tank_2d_from_block_2d(xf, yf, tank_length, tank_height,
     y = np.concatenate([yleft, yright, ybottom, ytop])
 
     return x, y
+
+
+def translate_system_with_left_corner_as_origin(x, y, z):
+    translation = [min(x), min(y), min(z)]
+    x[:] = x[:] - min(x)
+    y[:] = y[:] - min(y)
+    z[:] = z[:] - min(z)
+    return translation
 
 
 def test_hydrostatic_tank():

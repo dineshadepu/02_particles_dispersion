@@ -22,8 +22,9 @@ def get_particle_array_fluid(name, x, y, z=0., m=0., h=0., rho=0., ):
                             rho=rho,
                             m=m)
     add_properties(pa, 'arho', 'aconcentration', 'concentration', 'diff_coeff',
-                   'is_static')
+                   'is_static', 'ap')
     add_properties(pa, 'm_frac')
+    pa.add_constant('c0_ref', 0.)
     pa.m_frac[:] = 1.
     # default property arrays to save out.
     pa.set_output_arrays([
@@ -74,6 +75,59 @@ class ContinuityEquation(Equation):
         d_arho[d_idx] += s_m[s_idx]*vijdotdwij
 
 
+class DeltaSPHCorrection(Equation):
+    def __init__(self, dest, sources, c0, delta_fac=0.2):
+        self.delta_fac = delta_fac
+        self.c0 = c0
+        super(DeltaSPHCorrection, self).__init__(dest, sources)
+
+    def loop(self, d_idx, d_arho, s_idx, s_m, s_rho, d_rho, d_h, DWIJ, VIJ, XIJ,
+             R2IJ, EPS):
+        tmp = 2 * s_m[s_idx] / s_rho[s_idx] * (d_rho[d_idx] - s_rho[s_idx])
+        tmp1 = XIJ[0] * DWIJ[0] + XIJ[1] * DWIJ[1] + XIJ[2] * DWIJ[2]
+        tmp2 = self.delta_fac * d_h[d_idx] * self.c0
+
+        d_arho[d_idx] += tmp2 * tmp * tmp1 / (R2IJ + EPS)
+
+
+class EDACEquation(Equation):
+    def __init__(self, dest, sources, nu):
+        self.nu = nu
+        super(EDACEquation, self).__init__(dest, sources)
+
+    def initialize(self, d_ap, d_idx):
+        d_ap[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, d_p, d_rho, d_c0_ref, d_u, d_v, d_w,
+             s_p, s_m, s_rho, d_ap, DWIJ, XIJ,
+             s_u, s_v, s_w, R2IJ, VIJ, EPS):
+        cs2 = d_c0_ref[0] * d_c0_ref[0]
+
+        rhoj1 = 1.0 / s_rho[s_idx]
+        Vj = s_m[s_idx] * rhoj1
+        rhoi = d_rho[d_idx]
+        pi = d_p[d_idx]
+        rhoj = s_rho[s_idx]
+        pj = s_p[s_idx]
+
+        vij_dot_dwij = -(VIJ[0] * DWIJ[0] + VIJ[1] * DWIJ[1] +
+                         VIJ[2] * DWIJ[2])
+
+        #######################################################
+        # first term on the rhs of Eq 23 of the current paper #
+        #######################################################
+        d_ap[d_idx] += - rhoi * cs2 * Vj * vij_dot_dwij
+
+        #######################################################
+        # fourth term on the rhs of Eq 19 of the current paper #
+        #######################################################
+        rhoij = d_rho[d_idx] + s_rho[s_idx]
+        # The viscous damping of pressure.
+        xijdotdwij = DWIJ[0] * XIJ[0] + DWIJ[1] * XIJ[1] + DWIJ[2] * XIJ[2]
+        tmp = Vj * 4 * xijdotdwij / (rhoij * (R2IJ + EPS))
+        d_ap[d_idx] += self.nu * tmp * (d_p[d_idx] - s_p[s_idx])
+
+
 class StateEquation(Equation):
     def __init__(self, dest, sources, p0, rho0, b=1.0):
         self.b = b
@@ -82,7 +136,8 @@ class StateEquation(Equation):
         super(StateEquation, self).__init__(dest, sources)
 
     def initialize(self, d_idx, d_p, d_rho):
-        d_p[d_idx] = self.p0 * (d_rho[d_idx] / self.rho0 - self.b) + self.p0
+        # d_p[d_idx] = self.p0 * (d_rho[d_idx] / self.rho0 - self.b) + self.p0
+        d_p[d_idx] = self.p0 * (d_rho[d_idx] / self.rho0 - self.b)
 
 
 class DiffusionEquation(Equation):
@@ -181,9 +236,10 @@ class FluidStep(IntegratorStep):
             d_w[d_idx] += dtb2 * d_aw[d_idx]
 
     def stage2(self, d_idx, d_u, d_v, d_w, d_x, d_y, d_z, d_rho,
-               d_arho, d_concentration, d_aconcentration, dt):
+               d_arho, d_concentration, d_aconcentration, d_ap, d_p, dt):
         d_rho[d_idx] += dt * d_arho[d_idx]
         d_concentration[d_idx] += dt * d_aconcentration[d_idx]
+        d_p[d_idx] += dt * d_ap[d_idx]
 
         d_x[d_idx] += dt * d_u[d_idx]
         d_y[d_idx] += dt * d_v[d_idx]

@@ -1,6 +1,6 @@
 """A neutrally buoyand circular cylinder in a shear flow
 
-Section 7.1 in Hashemi 2012 paper
+Section 3.1.1 in Ng 2021 paper
 """
 import os
 
@@ -31,15 +31,11 @@ from rigid_fluid_coupling import (ParticlesFluidScheme,
                                   add_rigid_fluid_properties_to_rigid_body)
 
 
-class PoiseuilleFlow(Application):
+class Ng2021TwoBodiesInShearFlow(Application):
     def add_user_options(self, group):
         group.add_argument(
             "--re", action="store", type=float, dest="re", default=0.625,
             help="Reynolds number of flow."
-        )
-        group.add_argument(
-            "--remesh", action="store", type=float, dest="remesh", default=0,
-            help="Remeshing frequency (setting it to zero disables it)."
         )
 
     def consume_user_options(self):
@@ -53,8 +49,8 @@ class PoiseuilleFlow(Application):
         # ======================
         # Dimensions
         # ======================
-        H = 0.01
-        L = 0.8 * H
+        H = 1. * 1e-2
+        L = 5. * 1e-2
         # x - axis
         self.fluid_length = L
         # y - axis
@@ -70,6 +66,8 @@ class PoiseuilleFlow(Application):
         self.tank_depth = 0.0
         self.tank_layers = 4
 
+        # fixed cylinder position
+
         R = 1. / 8. * H
         self.rigid_body_diameter = R * 2.
         # ======================
@@ -79,7 +77,7 @@ class PoiseuilleFlow(Application):
         # ======================
         # Velocity
         # ======================
-        self.Umax = 0.02
+        self.Umax = 0.012
         # ======================
         # Dimensions ends
         # ======================
@@ -87,8 +85,8 @@ class PoiseuilleFlow(Application):
         # ======================
         # Physical properties and consants
         # ======================
-        self.fluid_rho = 1.
-        self.rigid_body_rho = 2.1
+        self.fluid_rho = 1000.
+        self.rigid_body_rho = 1000
 
         self.gx = 0.
         self.gy = 0.
@@ -112,7 +110,7 @@ class PoiseuilleFlow(Application):
         tmp = self.Umax * self.rigid_body_diameter**2. / (self.fluid_height * self.re)
         self.nu = tmp * self.fluid_rho
         print("viscosity is: ", self.nu)
-        self.tf = 1.
+        self.tf = 50.
         self.p0 = self.fluid_rho*self.c0**2
         self.alpha = 0.05
 
@@ -146,7 +144,7 @@ class PoiseuilleFlow(Application):
         # self.x_min = min(fx)
         # self.x_max = max(fx)
         self.x_min = 0.0
-        self.x_max = 0.008
+        self.x_max = self.fluid_length
         print("x min is ", self.x_min)
         print("x max is ", self.x_max)
         # ====================================================
@@ -173,17 +171,27 @@ class PoiseuilleFlow(Application):
         _y = np.arange(-self.dx/2, -self.dx/2-self.tank_layers*self.dx, -self.dx)
         x, y = np.meshgrid(_x, _y); bx = x.ravel(); by = y.ravel()
 
+        # fixed cylinder
+        x_fc, y_fc = create_circle_1(self.rigid_body_diameter, self.dx)
+        z_fc = np.zeros_like(x_fc)
+        m_fc = self.fluid_rho * self.dx**self.dim * np.ones_like(x_fc)
+        xcm_fc = get_center_of_mass(x_fc, y_fc, z_fc, m_fc)
+        # center_fc = [0., self.fluid_height / 2., 0.]
+        center_fc = [self.fluid_length / 2. + 0.375 * self.fluid_height, self.fluid_height / 2., 0.]
+        move_body_to_new_center(xcm_fc, x_fc, y_fc, z_fc, center_fc)
+
         # concatenate the top and bottom arrays
-        cx = np.concatenate((tx, bx))
-        cy = np.concatenate((ty, by))
+        cx = np.concatenate((tx, bx, x_fc))
+        cy = np.concatenate((ty, by, y_fc))
 
         # create the arrays
         channel = get_particle_array_boundary(name='channel', x=cx, y=cy)
         fluid = get_particle_array_fluid(name='fluid', x=fx, y=fy)
 
         # set velocities of the top particles of the channel
-        channel.u[channel.y > self.fluid_height / 2.] = self.Umax / 2.
-        channel.u[channel.y < self.fluid_height / 2.] = - self.Umax / 2.
+        channel.u[channel.y > max(channel.y) - 5. * self.dx] = self.Umax / 2.
+        channel.u[channel.y < min(channel.y) + 5. * self.dx] = - self.Umax / 2.
+        # add fixed cylinder
 
         print("Poiseuille flow :: Re = %g, nfluid = %d, nchannel=%d"%(
             self.re, fluid.get_number_of_particles(),
@@ -210,6 +218,9 @@ class PoiseuilleFlow(Application):
         # smoothing lengths
         fluid.h[:] = self.h
         channel.h[:] = self.h
+        G.remove_overlap_particles(
+            fluid, channel, self.dx, dim=self.dim
+        )
 
         # =========================
         # create rigid body
@@ -231,12 +242,13 @@ class PoiseuilleFlow(Application):
         # x[:] = min(fluid.x) - min(x) + self.rigid_body_length
         # y[:] += 0.3
         # x[:] += 0.3
-        center = [self.fluid_length/3., 0.75 * self.fluid_height, 0.]
+        # center = [self.fluid_length/3., 0.75 * self.fluid_height, 0.]
         # center = [self.rigid_body_diameter, 0.75 * self.fluid_height, 0.]
         # center = [self.fluid_length - 10. * self.dx, 0.75 * self.fluid_height, 0.]
         # center = [self.rigid_body_diameter, 2. * self.fluid_height, 0.]
         xcm = get_center_of_mass(x, y, z, m)
-        move_body_to_new_center(xcm, x, y, z, center)
+        center_rb = [self.fluid_length / 2. - 0.375 * self.fluid_height, self.fluid_height / 2., 0.]
+        move_body_to_new_center(xcm, x, y, z, center_rb)
 
         rigid_body = get_particle_array_rigid_body(name='rigid_body',
                                                    x=x,
@@ -311,16 +323,16 @@ class PoiseuilleFlow(Application):
 
         return eqns
 
-    def create_tools(self):
-        tools = []
-        if self.options.remesh > 0:
-            from pysph.solver.tools import SimpleRemesher
-            remesher = SimpleRemesher(
-                self, 'fluid', props=['u', 'v', 'uhat', 'vhat'],
-                freq=self.options.remesh
-            )
-            tools.append(remesher)
-        return tools
+    # def create_tools(self):
+    #     tools = []
+    #     if self.options.remesh > 0:
+    #         from pysph.solver.tools import SimpleRemesher
+    #         remesher = SimpleRemesher(
+    #             self, 'fluid', props=['u', 'v', 'uhat', 'vhat'],
+    #             freq=self.options.remesh
+    #         )
+    #         tools.append(remesher)
+    #     return tools
 
     def post_process(self, fname):
         import matplotlib.pyplot as plt
@@ -359,6 +371,6 @@ class PoiseuilleFlow(Application):
 
 
 if __name__ == '__main__':
-    app = PoiseuilleFlow()
+    app = Ng2021TwoBodiesInShearFlow()
     app.run()
     app.post_process(app.info_filename)

@@ -14,7 +14,9 @@ from pysph.sph.integrator_step import IntegratorStep
 
 from pysph.sph.wc.gtvf import GTVFIntegrator
 from pysph.examples.solid_mech.impact import add_properties
-from boundary_particles import add_boundary_identification_properties
+from boundary_particles import (add_boundary_identification_properties,
+                                get_boundary_identification_etvf_equations
+                                )
 
 
 class GTVFRigidBody3DStep(IntegratorStep):
@@ -249,7 +251,7 @@ class GTVFRigidBody3DStep(IntegratorStep):
         d_aw[d_idx] = d_acm[i3 + 2] + omega_omega_cross_z + ang_acc_cross_z
 
 
-def get_particle_array_rigid_body(x, y, z, m_rb, h, dem_id, body_id, name):
+def get_particle_array_rigid_body(constants=None, **props):
     """
     x: x coordinate of the positions of the particles belonging to the rigid body
     y: y coordinate of the positions of the particles belonging to the rigid body
@@ -258,14 +260,26 @@ def get_particle_array_rigid_body(x, y, z, m_rb, h, dem_id, body_id, name):
     m: z coordinate of the positions of the particles belonging to the rigid body
 
     """
-    rigid_body = get_particle_array(name=name,
-                                    x=x,
-                                    y=y,
-                                    z=z,
-                                    h=h,
-                                    m_rb=m_rb)
-    rigid_body.add_property('dem_id', type='int', data=dem_id)
-    rigid_body.add_property('body_id', type='int', data=body_id)
+    rb_props = [
+
+    ]
+
+    # set wdeltap to -1. Which defaults to no self correction
+    consts = {
+
+    }
+    if constants:
+        consts.update(constants)
+
+    wanted_keys = ['dem_id', 'body_id']
+    new = dict((k, props[k]) for k in wanted_keys if k in props)
+    for k in wanted_keys:
+        del props[k]
+
+    rigid_body = get_particle_array(constants=consts, additional_props=rb_props,
+                            **props)
+    rigid_body.add_property('dem_id', type='int', data=new['dem_id'])
+    rigid_body.add_property('body_id', type='int', data=new['body_id'])
 
     # forces on the particles and body frame vectors
     add_properties(rigid_body, 'fx', 'fy', 'fz', 'dx0', 'dy0', 'dz0', 'arho')
@@ -347,47 +361,36 @@ def get_particle_array_rigid_body(x, y, z, m_rb, h, dem_id, body_id, name):
 
     set_body_frame_position_vectors(rigid_body)
 
-    # add boundary particle properties and normals
+    ####################################################
+    # compute the boundary particles of the rigid body #
+    ####################################################
     add_boundary_identification_properties(rigid_body)
+    # make sure your rho is not zero
+    equations = get_boundary_identification_etvf_equations([rigid_body.name],
+                                                           [rigid_body.name])
+
+    sph_eval = SPHEvaluator(arrays=[rigid_body],
+                            equations=equations,
+                            dim=2,
+                            kernel=QuinticSpline(dim=2))
+
+    sph_eval.evaluate(dt=0.1)
+
+    # make normals of particle other than boundary particle as zero
+    # for i in range(len(pa.x)):
+    #     if pa.is_boundary[i] == 0:
+    #         pa.normal[3 * i] = 0.
+    #         pa.normal[3 * i + 1] = 0.
+    #         pa.normal[3 * i + 2] = 0.
+
+    # normal vectors in terms of body frame
+    # set_body_frame_normal_vectors(pa)
 
     rigid_body.set_output_arrays([
         'x', 'y', 'z', 'u', 'v', 'w', 'fx', 'fy', 'fz', 'm', 'body_id', 'h'
     ])
 
     return rigid_body
-
-
-            # ####################################################
-            # # compute the boundary particles of the rigid body #
-            # ####################################################
-            # add_boundary_identification_properties(pa)
-            # # make sure your rho is not zero
-            # equations = get_boundary_identification_etvf_equations([pa.name],
-            #                                                        [pa.name])
-            # # print(equations)
-
-            # sph_eval = SPHEvaluator(arrays=[pa],
-            #                         equations=equations,
-            #                         dim=self.dim,
-            #                         kernel=QuinticSpline(dim=self.dim))
-
-            # sph_eval.evaluate(dt=0.1)
-
-            # # make normals of particle other than boundary particle as zero
-            # # for i in range(len(pa.x)):
-            # #     if pa.is_boundary[i] == 0:
-            # #         pa.normal[3 * i] = 0.
-            # #         pa.normal[3 * i + 1] = 0.
-            # #         pa.normal[3 * i + 2] = 0.
-
-            # # normal vectors in terms of body frame
-            # set_body_frame_normal_vectors(pa)
-
-            # # Adami boundary conditions. SetWallVelocity
-            # add_properties(pa, 'rho_fsi', 'm_fsi', 'p_fsi')
-            # add_properties(pa, 'ug', 'vf', 'vg', 'wg', 'uf', 'wf', 'wij')
-            # add_properties(pa, 'uhat', 'vhat', 'what')
-            # pa.add_property('wij')
 
 
 def color_diagonal_of_rb(rb):

@@ -13,8 +13,7 @@ from pysph.examples.solid_mech.impact import add_properties
 from pysph.sph.integrator import Integrator
 
 from fluids import (ContinuityEquation, StateEquation, MomentumEquationPressureGradient, FluidStep,
-                    SolidWallNoSlipBC
-                    )
+                    SolidWallNoSlipBC, EDACEquation, DeltaSPHCorrection)
 from rigid_body import (SumUpExternalForces)
 
 
@@ -27,7 +26,14 @@ def add_rigid_fluid_properties_to_rigid_body(pa):
 
 
 class RigidFluidForce(Equation):
-    def __init__(self, dest, sources):
+    """Force on rigid body due to the interaction with fluid.
+    The force equation is taken from SPH-DCDEM paper by Canelas
+
+    nu: dynamics viscosity of the fluid
+
+    """
+    def __init__(self, dest, sources, nu=0):
+        self.nu = nu
         super(RigidFluidForce, self).__init__(dest, sources)
 
     def initialize(self, d_idx, d_fx, d_fy, d_fz):
@@ -36,10 +42,11 @@ class RigidFluidForce(Equation):
         d_fz[d_idx] = 0.
 
     def loop(self, d_rho, s_rho, d_idx, s_idx, d_p, s_p, s_m, d_m, d_fx, d_fy,
-             d_fz, DWIJ, XIJ, RIJ, SPH_KERNEL, HIJ):
+             d_fz, DWIJ, XIJ, RIJ, SPH_KERNEL, HIJ, R2IJ, EPS, VIJ):
         rhoi2 = d_rho[d_idx] * d_rho[d_idx]
         rhoj2 = s_rho[s_idx] * s_rho[s_idx]
 
+        # pressure forces
         pij = d_p[d_idx]/rhoi2 + s_p[s_idx]/rhoj2
 
         tmp = - d_m[d_idx] * s_m[s_idx] * pij
@@ -48,12 +55,23 @@ class RigidFluidForce(Equation):
         d_fy[d_idx] += tmp * DWIJ[1]
         d_fz[d_idx] += tmp * DWIJ[2]
 
+        # viscous forces
+        xdotdij = DWIJ[0]*XIJ[0] + DWIJ[1]*XIJ[1] + DWIJ[2]*XIJ[2]
+        tmp_1 = s_m[s_idx] * 4 * self.nu * xdotdij
+        tmp_2 = (d_rho[d_idx] + s_rho[s_idx]) * (R2IJ + EPS)
+        fac = tmp_1 / tmp_2
+
+        d_fx[d_idx] += d_m[d_idx] * fac * VIJ[0]
+        d_fy[d_idx] += d_m[d_idx] * fac * VIJ[1]
+        d_fz[d_idx] += d_m[d_idx] * fac * VIJ[2]
+
 
 class ParticlesFluidScheme(Scheme):
-    def __init__(self, fluids, boundaries, rigid_bodies, dim, c0, nu, rho0, pb=0.0,
+    def __init__(self, fluids, boundaries, rigid_bodies, dim, c0, nu, rho0, h, pb=0.0,
                  gx=0.0, gy=0.0, gz=0.0, alpha=0.0):
         self.c0 = c0
         self.nu = nu
+        self.h = h
         self.rho0 = rho0
         self.pb = pb
         self.gx = gx
@@ -66,19 +84,45 @@ class ParticlesFluidScheme(Scheme):
         self.rigid_bodies = rigid_bodies
         self.solver = None
 
-        self.attributes_changed()
+        self.artificial_viscosity_with_boundary = False
+        self.use_edac = False
+        self.use_delta_sph = False
 
     def add_user_options(self, group):
         group.add_argument("--alpha", action="store", type=float, dest="alpha",
-                           default=None,
+                           default=0.02,
                            help="Alpha for the artificial viscosity.")
+
+        group.add_argument("--nu", action="store", type=float, dest="nu",
+                           default=0.00,
+                           help="Dynamics viscosity.")
+
+        add_bool_argument(group, 'use-edac',
+                          dest='use_edac',
+                          default=False,
+                          help='Use edac for pressure evolution')
+
+        add_bool_argument(group, 'use-delta-sph',
+                          dest='use_delta_sph',
+                          default=False,
+                          help='Use Delta SPH for density evolution')
+
+        add_bool_argument(group, 'artificial-viscosity-with-boundary',
+                          dest='artificial_viscosity_with_boundary',
+                          default=False,
+                          help='Use boundary in artificial viscosity computation')
 
     def consume_user_options(self, options):
         vars = [
-            'alpha'
+            'alpha', 'artificial_viscosity_with_boundary', 'use_edac',
+            'use_delta_sph', 'nu'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in vars)
         self.configure(**data)
+
+    def attributes_changed(self):
+        self.edac_alpha = self._get_edac_nu()
+        self.edac_nu = self.edac_alpha * self.h * self.c0 / 8.
 
     def configure_solver(self, kernel=None, integrator_cls=None,
                          extra_steppers=None, **kw):
@@ -111,6 +155,7 @@ class ParticlesFluidScheme(Scheme):
 
         self.solver = Solver(dim=self.dim, integrator=integrator,
                              kernel=kernel, **kw)
+        # print("configure solver")
 
     def get_equations(self):
         from pysph.sph.wc.gtvf import (MomentumEquationViscosity)
@@ -135,7 +180,19 @@ class ParticlesFluidScheme(Scheme):
         eqs = []
         for fluid in self.fluids:
             eqs.append(ContinuityEquation(dest=fluid,
-                                          sources=all), )
+                                          sources=all))
+            if self.use_delta_sph == True:
+                eqs.append(DeltaSPHCorrection(dest=fluid,
+                                              sources=all,
+                                              c0=self.c0))
+
+            if self.use_edac == True:
+                for fluid in self.fluids:
+                    eqs.append(
+                        EDACEquation(dest=fluid,
+                                     sources=all,
+                                     nu=self.edac_nu))
+
         stage1.append(Group(equations=eqs, real=False))
 
         # =========================#
@@ -143,15 +200,16 @@ class ParticlesFluidScheme(Scheme):
         # =========================#
         stage2 = []
 
-        tmp = []
-        for fluid in self.fluids:
-            tmp.append(
-                StateEquation(dest=fluid,
-                              sources=None,
-                              rho0=self.rho0,
-                              p0=self.pb))
+        if self.use_edac == False:
+            tmp = []
+            for fluid in self.fluids:
+                tmp.append(
+                    StateEquation(dest=fluid,
+                                  sources=None,
+                                  rho0=self.rho0,
+                                  p0=self.pb))
 
-        stage2.append(Group(equations=tmp, real=False))
+            stage2.append(Group(equations=tmp, real=False))
 
         if len(self.boundaries) > 0:
             eqs = []
@@ -175,12 +233,6 @@ class ParticlesFluidScheme(Scheme):
         if len(self.rigid_bodies) > 0:
             eqs = []
             for body in self.rigid_bodies:
-                eqs.append(SetWallVelocity(dest=body, sources=self.fluids))
-            stage2.append(Group(equations=eqs, real=False))
-
-        if len(self.rigid_bodies) > 0:
-            eqs = []
-            for body in self.rigid_bodies:
                 eqs.append(
                     SourceNumberDensity(dest=body, sources=self.fluids))
                 eqs.append(
@@ -193,19 +245,27 @@ class ParticlesFluidScheme(Scheme):
 
         eqs = []
         for fluid in self.fluids:
-            # FIXME: Change alpha to variable
             if self.alpha > 0.:
-                eqs.append(
-                    MomentumEquationArtificialViscosity(
-                        dest=fluid, sources=self.fluids, c0=self.c0,
-                        alpha=self.alpha
+                if self.artificial_viscosity_with_boundary == True:
+                    eqs.append(
+                        MomentumEquationArtificialViscosity(
+                            dest=fluid, sources=self.fluids+self.boundaries, c0=self.c0,
+                            alpha=self.alpha
+                        )
                     )
-                )
+                else:
+                    eqs.append(
+                        MomentumEquationArtificialViscosity(
+                            dest=fluid, sources=self.fluids, c0=self.c0,
+                            alpha=self.alpha
+                        )
+                    )
+
             if self.nu > 0.0:
                 eqs.append(
                     MomentumEquationViscosity(
-                        dest=fluid, sources=self.fluids, nu=self.nu
-                    )
+                        dest=fluid, sources=self.fluids+self.rigid_bodies,
+                        nu=self.nu)
                 )
                 if len(self.boundaries) > 0:
                     eqs.append(
@@ -229,7 +289,7 @@ class ParticlesFluidScheme(Scheme):
             eqs = []
             for body in self.rigid_bodies:
                 eqs.append(
-                    RigidFluidForce(dest=body, sources=self.fluids))
+                    RigidFluidForce(dest=body, sources=self.fluids, nu=self.nu))
 
             stage2.append(Group(equations=eqs, real=True))
 
@@ -245,3 +305,13 @@ class ParticlesFluidScheme(Scheme):
             stage2.append(Group(equations=g6, real=False))
 
         return MultiStageEquations([stage1, stage2])
+
+    def _get_edac_nu(self):
+        if self.alpha > 0:
+            nu = self.alpha
+            # print(self.alpha)
+            # print("Using artificial viscosity for EDAC with nu = %s" % nu)
+        else:
+            nu = self.nu
+            # print("Using real viscosity for EDAC with nu = %s" % self.nu)
+        return nu
