@@ -11,6 +11,8 @@ from pysph.base.utils import get_particle_array
 
 from pysph.examples import cavity as LDC
 from pysph.sph.equation import Equation, Group
+import sys
+sys.path.insert(0, "./../")
 from fluids import (get_particle_array_fluid,
                     get_particle_array_boundary,
                     FluidsScheme)

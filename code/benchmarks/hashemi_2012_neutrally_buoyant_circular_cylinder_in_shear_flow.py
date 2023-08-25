@@ -13,6 +13,8 @@ from pysph.base.utils import get_particle_array
 from pysph.solver.application import Application
 from pysph.solver.utils import load
 import pysph.tools.geometry as G
+import sys
+sys.path.insert(0, "./../")
 from fluids import (get_particle_array_fluid,
                     get_particle_array_boundary,
                     FluidsScheme)
@@ -275,6 +277,7 @@ class PoiseuilleFlow(Application):
             rigid_bodies=["rigid_body"],
             dim=0.,
             rho0=0.,
+            h=0.,
             c0=0.,
             pb=0.,
             nu=0.,
@@ -289,6 +292,7 @@ class PoiseuilleFlow(Application):
         scheme.configure(
             dim=self.dim,
             rho0=self.fluid_rho,
+            h=self.h,
             c0=self.c0,
             pb=self.p0,
             nu=self.nu,
