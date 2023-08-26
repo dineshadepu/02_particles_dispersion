@@ -25,6 +25,87 @@ def add_rigid_fluid_properties_to_rigid_body(pa):
     add_properties(pa, 'ug', 'vf', 'uf', 'wf', 'vg', 'wg')
 
 
+class EvaluateSlipWallVelocity(Equation):
+    def __init__(self, dest, sources, rho0, c0):
+        self.rho0 = rho0
+        self.c0 = c0
+        super(EvaluateSlipWallVelocity, self).__init__(dest, sources)
+
+    def initialize(self, d_v, d_j2v, d_idx, d_vta, d_u, d_uta, d_j2, d_j3, d_j3v, d_normal):
+        tmp = 1 / (2 * self.rho0 * self.c0)
+        if (d_normal[3*d_idx+1] < -1e-14):
+            d_v[d_idx] = d_vta[d_idx] + d_j2v[d_idx] * tmp
+        elif (d_normal[3*d_idx+1] > 1e-14):
+            d_v[d_idx] = d_vta[d_idx] - d_j3v[d_idx] * tmp
+
+        if (d_normal[3*d_idx] < -1e-14):
+            d_u[d_idx] = d_uta[d_idx] + d_j2[d_idx] * tmp
+        elif (d_normal[3*d_idx] > 1e-14):
+            d_u[d_idx] = d_uta[d_idx] - d_j3[d_idx] * tmp
+
+
+class EvaluateSlipWallPressure(Equation):
+    def initialize(self, d_p, d_j2v, d_idx, d_pta, d_j3v, d_y, d_normal, d_j2, d_j3):
+        if (d_normal[3*d_idx+1] < -1e-14):
+            d_p[d_idx] = d_pta[d_idx] + d_j2v[d_idx] / 2
+        elif (d_normal[3*d_idx+1] > 1e-14):
+            d_p[d_idx] = d_pta[d_idx] + d_j3v[d_idx] / 2
+
+        if (d_normal[3*d_idx] < -1e-14):
+            d_p[d_idx] = d_pta[d_idx] + d_j2[d_idx] / 2
+        elif (d_normal[3*d_idx] > 1e-14):
+            d_p[d_idx] = d_pta[d_idx] + d_j3[d_idx] / 2
+
+
+class EvaluateCharacteristics(Equation):
+    def __init__(self, dest, sources, rho0, c0):
+        self.rho0 = rho0
+        self.c0 = c0
+        super(EvaluateCharacteristics, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_j1, d_j2, d_j3, d_u, d_p,
+                   d_uta, d_pta, d_v, d_j2v, d_j3v, d_vta):
+        co = self.c0
+        rho0 = self.rho0
+        d_j1[d_idx] = (d_p[d_idx] - d_pta[d_idx])
+        d_j2[d_idx] = rho0 * co * (d_u[d_idx] - d_uta[d_idx]) +\
+             (d_p[d_idx] - d_pta[d_idx])
+        d_j3[d_idx] = -rho0 * co * (d_u[d_idx] - d_uta[d_idx]) +\
+             (d_p[d_idx] - d_pta[d_idx])
+
+        d_j2v[d_idx] = rho0 * co * (d_v[d_idx] - d_vta[d_idx]) +\
+             (d_p[d_idx] - d_pta[d_idx])
+        d_j3v[d_idx] = -rho0 * co * (d_v[d_idx] - d_vta[d_idx]) +\
+             (d_p[d_idx] - d_pta[d_idx])
+
+
+class ExtrapolateCharacteristics(Equation):
+    def initialize(self, d_idx, d_j1, d_j2, d_j3, d_wij, d_j2v, d_j3v):
+        d_j1[d_idx] = 0.0
+        d_j2[d_idx] = 0.0
+        d_j3[d_idx] = 0.0
+        d_j2v[d_idx] = 0.0
+        d_j3v[d_idx] = 0.0
+        d_wij[d_idx] = 0.0
+
+    def loop(self, d_idx, d_j1, d_j2, d_j3, s_j1, s_j2, s_j3, WIJ, s_idx, d_j2v, d_j3v,
+             s_j2v, s_j3v, d_wij):
+        d_wij[d_idx] += WIJ
+        d_j1[d_idx] += s_j1[s_idx] * WIJ
+        d_j2[d_idx] += s_j2[s_idx] * WIJ
+        d_j3[d_idx] += s_j3[s_idx] * WIJ
+        d_j2v[d_idx] += s_j2v[s_idx] * WIJ
+        d_j3v[d_idx] += s_j3v[s_idx] * WIJ
+
+    def post_loop(self, d_idx, d_j1, d_j2, d_j3, d_wij, d_j2v, d_j3v):
+        if d_wij[d_idx] > 1e-14:
+            d_j1[d_idx] /= d_wij[d_idx]
+            d_j2[d_idx] /= d_wij[d_idx]
+            d_j3[d_idx] /= d_wij[d_idx]
+            d_j2v[d_idx] /= d_wij[d_idx]
+            d_j3v[d_idx] /= d_wij[d_idx]
+
+
 class RigidFluidForce(Equation):
     """Force on rigid body due to the interaction with fluid.
     The force equation is taken from SPH-DCDEM paper by Canelas
@@ -211,22 +292,36 @@ class ParticlesFluidScheme(Scheme):
 
             stage2.append(Group(equations=tmp, real=False))
 
+        tmp = []
+        for fluid in self.fluids:
+            tmp.append(
+                EvaluateCharacteristics(dest=fluid,
+                                sources=None,
+                                rho0=self.rho0,
+                                c0=self.c0))
+
+        stage2.append(Group(equations=tmp, real=False))
+
         if len(self.boundaries) > 0:
             eqs = []
             for boundary in self.boundaries:
-                eqs.append(SetWallVelocity(dest=boundary, sources=self.fluids))
+                # eqs.append(SetWallVelocity(dest=boundary, sources=self.fluids))
+                eqs.append(ExtrapolateCharacteristics(dest=boundary, sources=self.fluids))
             stage2.append(Group(equations=eqs, real=False))
 
         if len(self.boundaries) > 0:
             eqs = []
             for boundary in self.boundaries:
-                eqs.append(
-                    SourceNumberDensity(dest=boundary, sources=self.fluids))
-                eqs.append(
-                    SolidWallPressureBC(dest=boundary, sources=self.fluids,
-                                        gx=self.gx, gy=self.gy, gz=self.gz))
-                eqs.append(
-                    ClampWallPressure(dest=boundary, sources=None))
+                # eqs.append(
+                #     SourceNumberDensity(dest=boundary, sources=self.fluids))
+                # eqs.append(
+                #     SolidWallPressureBC(dest=boundary, sources=self.fluids,
+                #                         gx=self.gx, gy=self.gy, gz=self.gz))
+                # eqs.append(
+                #     ClampWallPressure(dest=boundary, sources=None))
+                eqs.append(EvaluateSlipWallVelocity(dest=boundary, sources=None, rho0=self.rho0, c0=self.c0))
+                eqs.append(EvaluateSlipWallPressure(dest=boundary, sources=None))
+
 
             stage2.append(Group(equations=eqs, real=False))
 

@@ -147,6 +147,7 @@ class Problem(Application):
         # ==========================
 
     def create_particles(self):
+        from wall_normal import get_normals
         xf, yf, xt, yt = hydrostatic_tank_2d(self.fluid_length, self.fluid_height,
                                              self.tank_height, self.tank_layers,
                                              self.dx, self.dx, False)
@@ -163,6 +164,16 @@ class Problem(Application):
         m = self.dx**self.dim * self.fluid_rho
         fluid = get_particle_array_fluid(name='fluid', x=xf, y=yf, z=zf, h=self.h, m=m, rho=self.fluid_rho)
         tank = get_particle_array_boundary(name='tank', x=xt, y=yt, z=zt, h=self.h, m=m, rho=self.fluid_rho)
+
+        props = ['j3', 'pta', 'j3v', 'j2v', 'j2', 'vta', 'uta', 'j1'] # required for non-reflecting boundary
+        for pa in (fluid, tank):
+            for prop in props:
+                pa.add_property(prop)
+            pa.pta[:] = 0.0
+            pa.uta[:] = 0.0
+            pa.vta[:] = 0.0
+
+        get_normals(tank, dim=2, domain=self.domain)
 
         # set the pressure of the fluid
         fluid.p[:] = - self.fluid_rho * self.gy * (max(fluid.y) - fluid.y[:])
