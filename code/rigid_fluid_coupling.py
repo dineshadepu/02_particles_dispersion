@@ -292,35 +292,35 @@ class ParticlesFluidScheme(Scheme):
 
             stage2.append(Group(equations=tmp, real=False))
 
-        tmp = []
-        for fluid in self.fluids:
-            tmp.append(
-                EvaluateCharacteristics(dest=fluid,
-                                sources=None,
-                                rho0=self.rho0,
-                                c0=self.c0))
+        # tmp = []
+        # for fluid in self.fluids:
+        #     tmp.append(
+        #         EvaluateCharacteristics(dest=fluid,
+        #                         sources=None,
+        #                         rho0=self.rho0,
+        #                         c0=self.c0))
 
-        stage2.append(Group(equations=tmp, real=False))
+        # stage2.append(Group(equations=tmp, real=False))
 
         if len(self.boundaries) > 0:
             eqs = []
             for boundary in self.boundaries:
-                # eqs.append(SetWallVelocity(dest=boundary, sources=self.fluids))
-                eqs.append(ExtrapolateCharacteristics(dest=boundary, sources=self.fluids))
+                eqs.append(SetWallVelocity(dest=boundary, sources=self.fluids))
+                # eqs.append(ExtrapolateCharacteristics(dest=boundary, sources=self.fluids))
             stage2.append(Group(equations=eqs, real=False))
 
         if len(self.boundaries) > 0:
             eqs = []
             for boundary in self.boundaries:
-                # eqs.append(
-                #     SourceNumberDensity(dest=boundary, sources=self.fluids))
-                # eqs.append(
-                #     SolidWallPressureBC(dest=boundary, sources=self.fluids,
-                #                         gx=self.gx, gy=self.gy, gz=self.gz))
-                # eqs.append(
-                #     ClampWallPressure(dest=boundary, sources=None))
-                eqs.append(EvaluateSlipWallVelocity(dest=boundary, sources=None, rho0=self.rho0, c0=self.c0))
-                eqs.append(EvaluateSlipWallPressure(dest=boundary, sources=None))
+                eqs.append(
+                    SourceNumberDensity(dest=boundary, sources=self.fluids))
+                eqs.append(
+                    SolidWallPressureBC(dest=boundary, sources=self.fluids,
+                                        gx=self.gx, gy=self.gy, gz=self.gz))
+                eqs.append(
+                    ClampWallPressure(dest=boundary, sources=None))
+                # eqs.append(EvaluateSlipWallVelocity(dest=boundary, sources=None, rho0=self.rho0, c0=self.c0))
+                # eqs.append(EvaluateSlipWallPressure(dest=boundary, sources=None))
 
 
             stage2.append(Group(equations=eqs, real=False))

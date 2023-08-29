@@ -56,7 +56,7 @@ class PoiseuilleFlow(Application):
         # Dimensions
         # ======================
         H = 0.01
-        L = 0.8 * H
+        L = 5 * H
         # x - axis
         self.fluid_length = L
         # y - axis
@@ -90,7 +90,7 @@ class PoiseuilleFlow(Application):
         # Physical properties and consants
         # ======================
         self.fluid_rho = 1000.
-        self.rigid_body_rho = 2000
+        self.rigid_body_rho = 1000
 
         self.gx = 0.
         self.gy = 0.
@@ -107,16 +107,16 @@ class PoiseuilleFlow(Application):
         # self.dx = 1.0/60.0
         self.dx = self.rigid_body_diameter / 10
         self.h = self.hdx * self.dx
-        self.vref = np.sqrt(2. * abs(self.gy) * self.fluid_height)
+        self.vref = self.Umax
         self.c0 = 10.0 * self.Umax
         self.mach_no = self.vref / self.c0
         # set the viscosity based on the particle reynolds no
-        tmp = self.Umax * self.rigid_body_diameter**2. / (self.fluid_height * self.re)
-        self.nu = tmp * self.fluid_rho
-        print("viscosity is: ", self.nu)
-        self.tf = 1.
+        self.nu = self.Umax * self.rigid_body_diameter**2. / (self.fluid_height * self.re)
+        self.mu = self.nu * self.fluid_rho
+        print("Kinematic viscosity is: ", self.nu)
+        self.tf = 80.
         self.p0 = self.fluid_rho*self.c0**2
-        self.alpha = 0.05
+        self.alpha = 0.02
 
         # Setup default parameters.
         # dt_cfl = 0.25 * self.h / (self.c0 + self.vref)
@@ -148,7 +148,7 @@ class PoiseuilleFlow(Application):
         # self.x_min = min(fx)
         # self.x_max = max(fx)
         self.x_min = 0.0
-        self.x_max = 0.008
+        self.x_max = self.fluid_length
         print("x min is ", self.x_min)
         print("x max is ", self.x_max)
         # ====================================================
@@ -336,28 +336,44 @@ class PoiseuilleFlow(Application):
 
         files = output_files
 
-        t = []
+        t_current = []
 
-        x_cm = []
+        vertical_position_current = []
         u_cm = []
 
-        step = 10
+        step = 1
         for sd, rigid_body in iter_output(files[::step], 'rigid_body'):
             _t = sd['t']
             print(_t)
-            x_cm.append(rigid_body.xcm[0])
+
+            vertical_position_current.append(rigid_body.xcm[1])
             u_cm.append(rigid_body.vcm[0])
-            t.append(_t)
+            t_current.append(_t)
+        t_currrent = np.asarray(t_current)
+        vertical_position_current = np.asarray(vertical_position_current)
 
-        plt.plot(t, x_cm, label="CoM x of particle")
-        plt.legend()
-        fig = os.path.join(self.output_dir, "t_vs_x_cm.png")
-        plt.savefig(fig, dpi=300)
-        plt.clf()
+        # Data from literature
+        path = os.path.abspath(__file__)
+        directory = os.path.dirname(path)
 
-        plt.plot(t, u_cm, label="U")
+        # load the data
+        # We use Sun 2018 accurate and efficient water entry paper data for validation
+        data_vertical_postion_feng_2018_exp = np.loadtxt(os.path.join(
+            directory, 'hashemi_2012_neutrally_inertial_migration_Z_G_Feng_2002_vertical_position_data.csv'), delimiter=',')
+
+        t_feng, vertical_position_feng = data_vertical_postion_feng_2018_exp[:, 0], data_vertical_postion_feng_2018_exp[:, 1]
+
+        res = os.path.join(self.output_dir, "results.npz")
+        np.savez(res,
+                 t_feng, vertical_position_feng,
+                 t_current, vertical_position_current)
+
+        plt.plot(t_current, vertical_position_current, label="Current SPH")
+        plt.plot(t_feng, vertical_position_feng, label="Feng 2002")
+        plt.ylabel("Vertical position (m)")
+        plt.xlabel("Time (seconds)")
         plt.legend()
-        fig = os.path.join(self.output_dir, "t_vs_u_cm.png")
+        fig = os.path.join(self.output_dir, "t_vs_y_cm.png")
         plt.savefig(fig, dpi=300)
         plt.clf()
 
