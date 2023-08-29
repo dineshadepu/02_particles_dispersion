@@ -39,8 +39,8 @@ rc('axes', prop_cycle=(
 ))
 
 
-n_core = 24
-n_thread = 24 * 2
+n_core = 6
+n_thread = n_core * 2
 backend = ' --openmp '
 
 
@@ -98,209 +98,248 @@ def get_files_at_given_times_from_log(files, times, logfile):
     return result
 
 
-class Vyas2021ReboundKinematics3d(Problem):
+class Skillen2013WaterEntryHalfBuoyant(Problem):
+    """
+    Pertains to Figure 14 (a)
+    """
     def get_name(self):
-        return 'vyas_2021_rebound_kinematics_3d'
+        return 'skillen_2013_water_entry_half_buoyant'
 
     def setup(self):
         get_path = self.input_path
 
-        cmd = 'python code/vyas_2021_rebound_kinematics_3d.py' + backend
+        cmd = 'python code/skillen_2013_circular_water_entry.py' + backend
 
-        samples = 5000
-        # E = 70 * 1e9
-        # nu = 0.3
-        # G = E / (2. * (1. + nu))
-        # E_star = E / (2. * (1. - nu**2.))
-
-        fric_coeff = 0.1
-        kr = 1e8
-        kf = 1e4
-
-        dt = 1e-6
         # Base case info
         self.case_info = {
-            'angle_2': (dict(
-                samples=samples,
-                velocity=5.,
-                angle=2.,
-                kr=kr,
-                kf=kf,
-                fric_coeff=fric_coeff,
-                timestep=dt,
-                ), 'Angle=2.'),
+            'rho_500_N_20': (dict(
+                scheme='wcsph',
+                alpha=0.0,
+                pfreq=500,
+                N=20,
+                rigid_body_rho=500
+                ), 'N=20'),
 
-            'angle_5': (dict(
-                samples=samples,
-                velocity=5.,
-                angle=5.,
-                kr=kr,
-                kf=kf,
-                fric_coeff=fric_coeff,
-                timestep=dt,
-                ), 'Angle=5.'),
+            'rho_500_N_50': (dict(
+                scheme='wcsph',
+                alpha=0.0,
+                pfreq=500,
+                N=50,
+                rigid_body_rho=500
+                ), 'N=50'),
 
-            'angle_10': (dict(
-                samples=samples,
-                velocity=5.,
-                angle=10.,
-                kr=kr,
-                kf=kf,
-                fric_coeff=fric_coeff,
-                timestep=dt,
-                ), 'Angle=10.'),
-
-            'angle_15': (dict(
-                samples=samples,
-                velocity=5.,
-                angle=15.,
-                kr=kr,
-                kf=kf,
-                fric_coeff=fric_coeff,
-                timestep=dt,
-                ), 'Angle=15.'),
-
-            'angle_20': (dict(
-                samples=samples,
-                velocity=5.,
-                angle=20.,
-                kr=kr,
-                kf=kf,
-                fric_coeff=fric_coeff,
-                timestep=dt,
-                ), 'Angle=20.'),
-
-            'angle_25': (dict(
-                samples=samples,
-                velocity=5.,
-                angle=25.,
-                kr=kr,
-                kf=kf,
-                fric_coeff=fric_coeff,
-                timestep=dt,
-                ), 'Angle=25.'),
-
-            'angle_30': (dict(
-                samples=samples,
-                velocity=5.,
-                angle=30.,
-                kr=kr,
-                kf=kf,
-                fric_coeff=fric_coeff,
-                timestep=dt,
-                ), 'Angle=30.'),
-
-            'angle_35': (dict(
-                samples=samples,
-                velocity=5.,
-                angle=35.,
-                kr=kr,
-                kf=kf,
-                fric_coeff=fric_coeff,
-                timestep=dt,
-                ), 'Angle=35.'),
-
-            'angle_40': (dict(
-                samples=samples,
-                velocity=5.,
-                angle=40.,
-                kr=kr,
-                kf=kf,
-                fric_coeff=fric_coeff,
-                timestep=dt,
-                ), 'Angle=40.'),
-
-            'angle_45': (dict(
-                samples=samples,
-                velocity=5.,
-                angle=45.,
-                kr=kr,
-                kf=kf,
-                fric_coeff=fric_coeff,
-                timestep=dt,
-                ), 'Angle=45.'),
-
-            # 'angle_60': (dict(
-            #     samples=samples,
-            #     velocity=5.,
-            #     angle=60.,
-            #     fric_coeff=fric_coeff,
-            #     ), 'Angle=60.'),
-
-            # 'angle_70': (dict(
-            #     samples=samples,
-            #     velocity=5.,
-            #     angle=70.,
-            #     fric_coeff=fric_coeff,
-            #     ), 'Angle=70.'),
-
-            # 'angle_80': (dict(
-            #     samples=samples,
-            #     velocity=5.,
-            #     angle=80.,
-            #     fric_coeff=fric_coeff,
-            #     ), 'Angle=80.'),
+            'rho_500_N_80': (dict(
+                scheme='wcsph',
+                alpha=0.0,
+                pfreq=500,
+                N=80,
+                rigid_body_rho=500
+                ), 'N=80'),
         }
 
         self.cases = [
             Simulation(get_path(name), cmd,
                        job_info=dict(n_core=n_core,
                                      n_thread=n_thread), cache_nnps=None,
-                       contact_force_model="Mohseni",
+                       tf=0.16,
+                       use_edac=None, nu=1e-6, max_s=1,
                        **scheme_opts(self.case_info[name][0]))
             for name in self.case_info
         ]
 
     def run(self):
         self.make_output_dir()
-        self.plot_theta_vs_omega()
+        # self.plot_displacement()
+        conditions = {'d0': 1e-2 * 0.55}
 
-    def plot_theta_vs_omega(self):
+        # # schematic
+        # self.plot_prop(conditions=conditions, size=0.1,
+        #                show_fluid=True, fmin=0, fmax=18000, show_structure=True,
+        #                smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
+        #                scmap='winter', show_fsmap=False, times=[0],
+        #                fname_prefix="schematic", only_colorbar=False)
+
+        # self.plot_prop(conditions=conditions, size=0.1,
+        #                show_fluid=True, fmin=0, fmax=18000, show_structure=False,
+        #                smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=True,
+        #                scmap='winter', show_fsmap=False, times=[0],
+        #                fname_prefix="colorbar", only_colorbar=True)
+
+        # # snapshots at different timesteps
+        # self.plot_prop(conditions=conditions, size=0.2,
+        #                show_fluid=True, fmin=0, fmax=18000, show_structure=True,
+        #                smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
+        #                scmap='viridis', show_fsmap=False, times=[0.3],
+        #                fname_prefix="snap", only_colorbar=False)
+
+        # # save colorbar
+        # self.plot_prop(conditions=conditions, size=0.2,
+        #                show_fluid=True, fmin=0, fmax=18000, show_structure=True,
+        #                smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=True,
+        #                scmap='viridis', show_fsmap=True, times=[0.3],
+        #                fname_prefix="colorbar", only_colorbar=True)
+
+    def plot_displacement(self):
         data = {}
         for name in self.case_info:
             data[name] = np.load(self.input_path(name, 'results.npz'))
-            theta_exp = data[name]['theta_exp']
-            omega_exp = data[name]['omega_exp']
 
-        non_dim_theta = []
-        non_dim_omega = []
+        rand_case = (list(data.keys())[0])
+        t_analytical = data[rand_case]['t_analytical']
+        y_analytical = data[rand_case]['y_analytical']
+        t_ng_2020 = data[rand_case]['t_ng_2020']
+        y_ng_2020 = data[rand_case]['y_ng_2020']
 
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.plot(t_analytical, y_analytical, "-", label='Analytical')
+        plt.plot(t_ng_2020, y_ng_2020, "-", label='SPH-VCPM (Ng et al. 2020)')
         for name in self.case_info:
-            non_dim_theta.append(data[name]['non_dim_theta'])
-            non_dim_omega.append(data[name]['non_dim_omega'])
+            t_ctvf = data[name]['t_ctvf']
+            y_ctvf = data[name]['y_ctvf']
 
-        plt.plot(non_dim_theta, non_dim_omega, '^-', label='Simulated')
-        plt.plot(theta_exp, omega_exp, 'v-', label='Thornton et al. (Exp)')
-        plt.xlabel(r'$\theta^{*}_i$')
-        plt.ylabel(r'$\omega^{*}_r$')
+            plt.plot(t_ctvf, y_ctvf, label=self.case_info[name][1])
+
+        plt.xlabel('time')
+        plt.ylabel('y - amplitude')
         plt.legend(prop={'size': 12})
         # plt.tight_layout(pad=0)
-        plt.savefig(self.output_path('theta_vs_omega.pdf'))
+        plt.savefig(self.output_path('y_amplitude.pdf'))
         plt.clf()
         plt.close()
+        # ==================================
+        # Plot x amplitude
+        # ==================================
 
-        # save the data for comparison between primary and secondary flip
-        path = os.path.abspath(__file__)
-        tmp = os.path.dirname(path)
+    def plot_prop(self, conditions=None,
+                  fcmap='rainbow', scmap='rainbow', figsize=(10, 4), size=20,
+                  dpi=300, show_fluid=True, fmin=-6, fmax=6,
+                  show_structure=True, smin=-6, smax=6, show_fcmap=True,
+                  show_fsmap=True, times=None, only_colorbar=False,
+                  fname_prefix=''):
+        if conditions is None:
+            conditions = {}
+        if times is None:
+            times = [1, 2, 3]
+        aspect = 70
+        pad = 0.
+        size_boundary = 0.1
 
-        new_directory = os.path.join(tmp, "outputs",
-                                     "vyas_2021_rebound_kinematics_3d_compare_flipped")
+        for case in filter_cases(self.cases, **conditions):
+            filename_w_ext = os.path.basename(case.base_command.split(' ')[1])
+            filename = os.path.splitext(filename_w_ext)[0]
+            files = get_files(case.input_path(), filename)
+            logfile = case.input_path(f'{filename}.log')
+            files = get_files_at_given_times_from_log(files, times, logfile)
+            for file, t in zip(files, times):
+                fig, ax = plt.subplots(1, 1, figsize=figsize)
+                data = load(file)
+                t = data['solver_data']['t']
+                f = data['arrays']['fluid']
+                s1 = data['arrays']['tank']
+                s = data['arrays']['gate']
+                s2 = data['arrays']['gate_support']
+                label = rf"p"
+                val = f.get('p')
+                if show_fluid == True:
+                    tmp = ax.scatter(
+                        f.x, f.y, c=val, s=size, rasterized=True, cmap=fcmap,
+                        edgecolor='none', vmin=fmin, vmax=fmax
+                    )
 
-        if not os.path.exists(new_directory):
-            os.makedirs(new_directory)
+                    if show_fcmap == True:
+                        # cbarf = fig.colorbar(tmp, ax=ax, shrink=0.8, label=f'{label}',
+                        #                      pad=0.01, aspect=20)
+                        cbarf = fig.colorbar(tmp, ax=ax, label=f'{label}',
+                                             pad=pad, aspect=aspect,
+                                             format='%.0e')
+                        cbarf.ax.tick_params(labelsize='xx-small')
 
-        res = os.path.join(new_directory, "vyas_no_flipped")
+                if show_structure == True:
+                    tmp2 = ax.scatter(s.x, s.y, c=s.sigma00, s=size, rasterized=True,
+                                      cmap=scmap,
+                                      edgecolor='none',
+                                      vmin=smin, vmax=smax)
 
-        np.savez(res,
-                 theta_exp=theta_exp,
-                 omega_exp=omega_exp,
-                 non_dim_theta=non_dim_theta,
-                 non_dim_omega=non_dim_omega)
+                    if show_fsmap == True:
+                        # cbars = fig.colorbar(tmp2, ax=ax, shrink=0.8, label=r'$\sigma_{00}$',
+                        #                      pad=0.01, aspect=20)
+                        cbars = fig.colorbar(tmp2, ax=ax, label=r'$\sigma_{00}$',
+                                             pad=pad, aspect=aspect,
+                                             format='%.0e')
+                        cbars.ax.tick_params(labelsize='xx-small')
+
+                msg = r"$t = $" + f'{t:.1f}'
+                # xmax = f.x.max()
+                # ymax = f.y.max()
+                # ax.annotate(
+                #     msg, (xmax*1.2, ymax*1.0), fontsize='small',
+                #     bbox=dict(boxstyle="square,pad=0.3", fc='white')
+                # )
+
+                if show_fluid == True and show_structure == True:
+                    ax.scatter(s1.x, s1.y, c=s1.m, cmap='viridis', s=size_boundary,
+                               rasterized=True)
+                    ax.scatter(s2.x, s2.y, c=s2.m, cmap='viridis', s=size_boundary,
+                               rasterized=True)
+                # ax.title()
+                ax.axis('off')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.grid()
+                ax.set_aspect('equal')
+
+                if only_colorbar is True:
+                    ax.remove()
+
+                fig.savefig(self.output_path(f'{fname_prefix}_t_{t:.1f}.png'),
+                            dpi=dpi)
+
+                plt.clf()
+                plt.close()
+
+    def get_colorbar_limits(self, conditions=None, fval='p', sval='sigma00',
+                            times=[0]):
+        if conditions is None:
+            conditions = {}
+        if times is None:
+            times = [1, 2, 3]
+
+        fmin = 0.
+        fmax = 0.
+        smin = 0.
+        smax = 0.
+
+        for case in filter_cases(self.cases, **conditions):
+            filename_w_ext = os.path.basename(case.base_command.split(' ')[1])
+            filename = os.path.splitext(filename_w_ext)[0]
+            files = get_files(case.input_path(), filename)
+            logfile = case.input_path(f'{filename}.log')
+            files = get_files_at_given_times_from_log(files, times, logfile)
+            for file, t in zip(files, times):
+                data = load(file)
+                f = data['arrays']['fluid']
+                s = data['arrays']['gate']
+
+                if fmin > min(f.get(fval)):
+                    fmin = min(f.get(fval))
+
+                if fmax < max(f.get(fval)):
+                    fmax = max(f.get(fval))
+
+                if smin > min(s.get(sval)):
+                    smin = min(s.get(sval))
+
+                if smax < max(s.get(sval)):
+                    smax = max(s.get(sval))
+
+        return fmin, fmax, smin, smax
 
 
 if __name__ == '__main__':
     PROBLEMS = [
-        Vyas2021ReboundKinematics3d,  # Done
+        Skillen2013WaterEntryHalfBuoyant
         ]
 
     automator = Automator(
