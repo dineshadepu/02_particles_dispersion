@@ -138,7 +138,7 @@ class Problem(Application):
         self.c0 = 10 * self.vref
         self.mach_no = self.vref / self.c0
         self.nu = self.options.nu
-        self.tf = 0.56
+        self.tf = 0.18
         # self.tf = 0.56 - 0.3192
         self.p0 = self.fluid_rho*self.c0**2
         self.alpha = 0.00
@@ -233,7 +233,7 @@ class Problem(Application):
         set_linear_velocity_of_rigid_body(rigid_body, [0., -self.rigid_body_velocity, 0.])
         indices_rb_inside_cond = (rigid_body.normal_norm == 0.)
         indices = np.where(indices_rb_inside_cond == True)
-        # rigid_body.remove_particles(indices[0])
+        rigid_body.remove_particles(indices[0])
         # =========================
         # create rigid body ends
         # =========================
@@ -318,11 +318,13 @@ class Problem(Application):
 
         for sd, rigid_body in iter_output(files, 'rigid_body'):
             _t = sd['t']
-            if _t < 0.16:
-                y.append(rigid_body.xcm[1])
-                u.append(rigid_body.vcm[0])
-                v.append(rigid_body.vcm[1])
-                t.append(_t)
+            y.append(rigid_body.xcm[1])
+            u.append(rigid_body.vcm[0])
+            v.append(rigid_body.vcm[1])
+            t.append(_t)
+        # non dimentionalize it
+        penetration_current = (np.asarray(y)[::1] - y_0) / self.rigid_body_diameter
+        t_current = np.asarray(t)[::1] * (9.81 / self.rigid_body_diameter)**0.5
 
         # Data from literature
         path = os.path.abspath(__file__)
@@ -330,22 +332,53 @@ class Problem(Application):
 
         # load the data
         # We use Sun 2018 accurate and efficient water entry paper data for validation
-        data_y_penetration_sun_2018_exp = np.loadtxt(os.path.join(
-            directory, 'sun_2018_falling_500_rho_experimental_data.csv'), delimiter=',')
-        data_y_penetration_sun_2018_BEM = np.loadtxt(os.path.join(
-            directory, 'sun_2018_falling_500_rho_BEM_data.csv'), delimiter=',')
-        data_y_penetration_sun_2018_SPH = np.loadtxt(os.path.join(
-            directory, 'sun_2018_falling_500_rho_SPH_data.csv'), delimiter=',')
+        if self.rigid_body_rho == 500.:
+            data_y_penetration_sun_2018_exp = np.loadtxt(os.path.join(
+                directory, 'sun_2018_falling_500_rho_experimental_data.csv'), delimiter=',')
+            data_y_penetration_sun_2018_BEM = np.loadtxt(os.path.join(
+                directory, 'sun_2018_falling_500_rho_BEM_data.csv'), delimiter=',')
+            # This is 200 resolution D / dx = 200
+            data_y_penetration_sun_2018_SPH = np.loadtxt(os.path.join(
+                directory, 'sun_2018_falling_500_rho_SPH_data.csv'), delimiter=',')
+        if self.rigid_body_rho == 1000.:
+            data_y_penetration_sun_2018_exp = np.loadtxt(os.path.join(
+                directory, 'sun_2018_falling_1000_rho_experimental_data.csv'), delimiter=',')
+            data_y_penetration_sun_2018_BEM = np.loadtxt(os.path.join(
+                directory, 'sun_2018_falling_1000_rho_BEM_data.csv'), delimiter=',')
+            # This is 200 resolution D / dx = 200
+            data_y_penetration_sun_2018_SPH = np.loadtxt(os.path.join(
+                directory, 'sun_2018_falling_1000_rho_SPH_data.csv'), delimiter=',')
 
         t_exp, penetration_exp = data_y_penetration_sun_2018_exp[:, 0], data_y_penetration_sun_2018_exp[:, 1]
         t_BEM, penetration_BEM = data_y_penetration_sun_2018_BEM[:, 0], data_y_penetration_sun_2018_BEM[:, 1]
         t_SPH, penetration_SPH = data_y_penetration_sun_2018_SPH[:, 0], data_y_penetration_sun_2018_SPH[:, 1]
+        # =================
+        # sort webplot data
+        p = t_SPH.argsort()
+        t_SPH = t_SPH[p]
+        penetration_SPH = penetration_SPH[p]
+        # t_SPH = np.delete(t_SPH, np.where(t_SPH > 1.65 and t_SPH < 1.75))
+        # penetration_SPH = np.delete(penetration_SPH,  np.where(t_SPH > 1.65 and t_SPH < 1.75))
+        t_SPH = np.delete(t_SPH, -4)
+        penetration_SPH = np.delete(penetration_SPH, -4)
+
+        p = t_BEM.argsort()
+        t_BEM = t_BEM[p]
+        penetration_BEM = penetration_BEM[p]
+        # sort webplot data
+        # =================
 
         res = os.path.join(self.output_dir, "results.npz")
         np.savez(res,
-                 t_exp, penetration_exp,
-                 t_BEM, penetration_BEM,
-                 t_SPH, penetration_SPH)
+                 t_exp=t_exp,
+                 penetration_exp=penetration_exp,
+                 t_BEM=t_BEM,
+                 penetration_BEM=penetration_BEM,
+                 t_SPH=t_SPH,
+                 penetration_SPH=penetration_SPH,
+                 t_current=t_current,
+                 penetration_current=-penetration_current)
+        data = np.load(res)
 
         # ========================
         # Variation of y penetration
@@ -354,11 +387,7 @@ class Problem(Application):
         plt.plot(t_exp, penetration_exp, "^", label='Experimental')
         plt.plot(t_SPH, penetration_SPH, "-+", label='SPH')
         plt.plot(t_BEM, penetration_BEM, "--", label='BEM')
-
-        # non dimentionalize it
-        current_penetration = (np.asarray(y)[::5] - y_0) / self.rigid_body_diameter
-        t_adjusted = np.asarray(t)[::5] * (9.81 / self.rigid_body_diameter)**0.5
-        plt.plot(t_adjusted, -current_penetration, "-", label='Current')
+        plt.plot(t_current, -penetration_current, "-", label='Current')
 
         plt.title('Variation in y-penetration')
         plt.xlabel('t (g / D)^{1/2}')

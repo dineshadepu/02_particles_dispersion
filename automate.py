@@ -39,7 +39,7 @@ rc('axes', prop_cycle=(
 ))
 
 
-n_core = 6
+n_core = 32
 n_thread = n_core * 2
 backend = ' --openmp '
 
@@ -142,42 +142,14 @@ class Skillen2013WaterEntryHalfBuoyant(Problem):
                        job_info=dict(n_core=n_core,
                                      n_thread=n_thread), cache_nnps=None,
                        tf=0.16,
-                       use_edac=None, nu=1e-6, max_s=1,
+                       use_edac=None, nu=1e-6,
                        **scheme_opts(self.case_info[name][0]))
             for name in self.case_info
         ]
 
     def run(self):
         self.make_output_dir()
-        # self.plot_displacement()
-        conditions = {'d0': 1e-2 * 0.55}
-
-        # # schematic
-        # self.plot_prop(conditions=conditions, size=0.1,
-        #                show_fluid=True, fmin=0, fmax=18000, show_structure=True,
-        #                smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
-        #                scmap='winter', show_fsmap=False, times=[0],
-        #                fname_prefix="schematic", only_colorbar=False)
-
-        # self.plot_prop(conditions=conditions, size=0.1,
-        #                show_fluid=True, fmin=0, fmax=18000, show_structure=False,
-        #                smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=True,
-        #                scmap='winter', show_fsmap=False, times=[0],
-        #                fname_prefix="colorbar", only_colorbar=True)
-
-        # # snapshots at different timesteps
-        # self.plot_prop(conditions=conditions, size=0.2,
-        #                show_fluid=True, fmin=0, fmax=18000, show_structure=True,
-        #                smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
-        #                scmap='viridis', show_fsmap=False, times=[0.3],
-        #                fname_prefix="snap", only_colorbar=False)
-
-        # # save colorbar
-        # self.plot_prop(conditions=conditions, size=0.2,
-        #                show_fluid=True, fmin=0, fmax=18000, show_structure=True,
-        #                smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=True,
-        #                scmap='viridis', show_fsmap=True, times=[0.3],
-        #                fname_prefix="colorbar", only_colorbar=True)
+        self.plot_displacement()
 
     def plot_displacement(self):
         data = {}
@@ -185,161 +157,135 @@ class Skillen2013WaterEntryHalfBuoyant(Problem):
             data[name] = np.load(self.input_path(name, 'results.npz'))
 
         rand_case = (list(data.keys())[0])
-        t_analytical = data[rand_case]['t_analytical']
-        y_analytical = data[rand_case]['y_analytical']
-        t_ng_2020 = data[rand_case]['t_ng_2020']
-        y_ng_2020 = data[rand_case]['y_ng_2020']
+        t_exp = data[rand_case]['t_exp']
+        t_BEM = data[rand_case]['t_BEM']
+        t_SPH = data[rand_case]['t_SPH']
+        penetration_exp = data[rand_case]['penetration_exp']
+        penetration_BEM = data[rand_case]['penetration_BEM']
+        penetration_SPH = data[rand_case]['penetration_SPH']
 
         # ==================================
         # Plot x amplitude
         # ==================================
-        plt.plot(t_analytical, y_analytical, "-", label='Analytical')
-        plt.plot(t_ng_2020, y_ng_2020, "-", label='SPH-VCPM (Ng et al. 2020)')
+        plt.clf()
         for name in self.case_info:
-            t_ctvf = data[name]['t_ctvf']
-            y_ctvf = data[name]['y_ctvf']
+            t_current = data[name]['t_current']
+            penetration_current = data[name]['penetration_current']
 
-            plt.plot(t_ctvf, y_ctvf, label=self.case_info[name][1])
+            plt.plot(t_current, penetration_current, label=self.case_info[name][1])
+        plt.plot(t_exp, penetration_exp, "^", label='Experimental')
+        plt.plot(t_SPH, penetration_SPH, "-+", label='delta-plus SPH, N=200')
+        # plt.plot(t_BEM, penetration_BEM, "--", label='BEM')
+        plt.plot(t_BEM, penetration_BEM, label='BEM')
 
-        plt.xlabel('time')
-        plt.ylabel('y - amplitude')
+        plt.xlabel('t (g / D)^{1/2}')
+        plt.ylabel('Penetration (y - y_0)/D')
         plt.legend(prop={'size': 12})
         # plt.tight_layout(pad=0)
-        plt.savefig(self.output_path('y_amplitude.pdf'))
+        plt.savefig(self.output_path('penetration_vs_t.pdf'))
         plt.clf()
         plt.close()
         # ==================================
         # Plot x amplitude
         # ==================================
 
-    def plot_prop(self, conditions=None,
-                  fcmap='rainbow', scmap='rainbow', figsize=(10, 4), size=20,
-                  dpi=300, show_fluid=True, fmin=-6, fmax=6,
-                  show_structure=True, smin=-6, smax=6, show_fcmap=True,
-                  show_fsmap=True, times=None, only_colorbar=False,
-                  fname_prefix=''):
-        if conditions is None:
-            conditions = {}
-        if times is None:
-            times = [1, 2, 3]
-        aspect = 70
-        pad = 0.
-        size_boundary = 0.1
 
-        for case in filter_cases(self.cases, **conditions):
-            filename_w_ext = os.path.basename(case.base_command.split(' ')[1])
-            filename = os.path.splitext(filename_w_ext)[0]
-            files = get_files(case.input_path(), filename)
-            logfile = case.input_path(f'{filename}.log')
-            files = get_files_at_given_times_from_log(files, times, logfile)
-            for file, t in zip(files, times):
-                fig, ax = plt.subplots(1, 1, figsize=figsize)
-                data = load(file)
-                t = data['solver_data']['t']
-                f = data['arrays']['fluid']
-                s1 = data['arrays']['tank']
-                s = data['arrays']['gate']
-                s2 = data['arrays']['gate_support']
-                label = rf"p"
-                val = f.get('p')
-                if show_fluid == True:
-                    tmp = ax.scatter(
-                        f.x, f.y, c=val, s=size, rasterized=True, cmap=fcmap,
-                        edgecolor='none', vmin=fmin, vmax=fmax
-                    )
+class Skillen2013WaterEntryNeutrallyBuoyant(Problem):
+    """
+    Pertains to Figure 14 (b)
+    """
+    def get_name(self):
+        return 'skillen_2013_water_entry_neutrally_buoyant'
 
-                    if show_fcmap == True:
-                        # cbarf = fig.colorbar(tmp, ax=ax, shrink=0.8, label=f'{label}',
-                        #                      pad=0.01, aspect=20)
-                        cbarf = fig.colorbar(tmp, ax=ax, label=f'{label}',
-                                             pad=pad, aspect=aspect,
-                                             format='%.0e')
-                        cbarf.ax.tick_params(labelsize='xx-small')
+    def setup(self):
+        get_path = self.input_path
 
-                if show_structure == True:
-                    tmp2 = ax.scatter(s.x, s.y, c=s.sigma00, s=size, rasterized=True,
-                                      cmap=scmap,
-                                      edgecolor='none',
-                                      vmin=smin, vmax=smax)
+        cmd = 'python code/skillen_2013_circular_water_entry.py' + backend
 
-                    if show_fsmap == True:
-                        # cbars = fig.colorbar(tmp2, ax=ax, shrink=0.8, label=r'$\sigma_{00}$',
-                        #                      pad=0.01, aspect=20)
-                        cbars = fig.colorbar(tmp2, ax=ax, label=r'$\sigma_{00}$',
-                                             pad=pad, aspect=aspect,
-                                             format='%.0e')
-                        cbars.ax.tick_params(labelsize='xx-small')
+        # Base case info
+        self.case_info = {
+            'rho_1000_N_20': (dict(
+                scheme='wcsph',
+                alpha=0.0,
+                pfreq=500,
+                N=20,
+                rigid_body_rho=1000
+                ), 'N=20'),
 
-                msg = r"$t = $" + f'{t:.1f}'
-                # xmax = f.x.max()
-                # ymax = f.y.max()
-                # ax.annotate(
-                #     msg, (xmax*1.2, ymax*1.0), fontsize='small',
-                #     bbox=dict(boxstyle="square,pad=0.3", fc='white')
-                # )
+            'rho_1000_N_50': (dict(
+                scheme='wcsph',
+                alpha=0.0,
+                pfreq=500,
+                N=50,
+                rigid_body_rho=1000
+                ), 'N=50'),
 
-                if show_fluid == True and show_structure == True:
-                    ax.scatter(s1.x, s1.y, c=s1.m, cmap='viridis', s=size_boundary,
-                               rasterized=True)
-                    ax.scatter(s2.x, s2.y, c=s2.m, cmap='viridis', s=size_boundary,
-                               rasterized=True)
-                # ax.title()
-                ax.axis('off')
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.grid()
-                ax.set_aspect('equal')
+            'rho_1000_N_80': (dict(
+                scheme='wcsph',
+                alpha=0.0,
+                pfreq=500,
+                N=80,
+                rigid_body_rho=1000
+                ), 'N=80'),
+        }
 
-                if only_colorbar is True:
-                    ax.remove()
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       tf=0.20,
+                       use_edac=None, nu=1e-6,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
 
-                fig.savefig(self.output_path(f'{fname_prefix}_t_{t:.1f}.png'),
-                            dpi=dpi)
+    def run(self):
+        self.make_output_dir()
+        self.plot_displacement()
 
-                plt.clf()
-                plt.close()
+    def plot_displacement(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
 
-    def get_colorbar_limits(self, conditions=None, fval='p', sval='sigma00',
-                            times=[0]):
-        if conditions is None:
-            conditions = {}
-        if times is None:
-            times = [1, 2, 3]
+        rand_case = (list(data.keys())[0])
+        t_exp = data[rand_case]['t_exp']
+        t_BEM = data[rand_case]['t_BEM']
+        t_SPH = data[rand_case]['t_SPH']
+        penetration_exp = data[rand_case]['penetration_exp']
+        penetration_BEM = data[rand_case]['penetration_BEM']
+        penetration_SPH = data[rand_case]['penetration_SPH']
 
-        fmin = 0.
-        fmax = 0.
-        smin = 0.
-        smax = 0.
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.clf()
+        for name in self.case_info:
+            t_current = data[name]['t_current']
+            penetration_current = data[name]['penetration_current']
 
-        for case in filter_cases(self.cases, **conditions):
-            filename_w_ext = os.path.basename(case.base_command.split(' ')[1])
-            filename = os.path.splitext(filename_w_ext)[0]
-            files = get_files(case.input_path(), filename)
-            logfile = case.input_path(f'{filename}.log')
-            files = get_files_at_given_times_from_log(files, times, logfile)
-            for file, t in zip(files, times):
-                data = load(file)
-                f = data['arrays']['fluid']
-                s = data['arrays']['gate']
+            plt.plot(t_current, penetration_current, label=self.case_info[name][1])
+        plt.plot(t_exp, penetration_exp, "^", label='Experimental')
+        plt.plot(t_SPH, penetration_SPH, "-+", label='delta-plus SPH, N=200')
+        # plt.plot(t_BEM, penetration_BEM, "--", label='BEM')
+        plt.plot(t_BEM, penetration_BEM, label='BEM')
 
-                if fmin > min(f.get(fval)):
-                    fmin = min(f.get(fval))
-
-                if fmax < max(f.get(fval)):
-                    fmax = max(f.get(fval))
-
-                if smin > min(s.get(sval)):
-                    smin = min(s.get(sval))
-
-                if smax < max(s.get(sval)):
-                    smax = max(s.get(sval))
-
-        return fmin, fmax, smin, smax
+        plt.xlabel('t (g / D)^{1/2}')
+        plt.ylabel('Penetration (y - y_0)/D')
+        plt.legend(prop={'size': 12})
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('penetration_vs_t.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot x amplitude
+        # ==================================
 
 
 if __name__ == '__main__':
     PROBLEMS = [
-        Skillen2013WaterEntryHalfBuoyant
+        Skillen2013WaterEntryHalfBuoyant,
+        Skillen2013WaterEntryNeutrallyBuoyant,
         ]
 
     automator = Automator(
