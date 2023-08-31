@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from pysph.tools.geometry import get_2d_block, get_2d_tank, get_3d_block
+from pysph.tools.geometry import get_2d_block, get_2d_tank, get_3d_block, rotate, remove_overlap_particles
+from pysph.base.utils import get_particle_array
 
 
 def hydrostatic_tank_2d(fluid_length=1., fluid_height=2.,
@@ -90,6 +91,81 @@ def create_circle_1(diameter=1, spacing=0.05, center=None):
     else:
         return x + center[0], y + center[1]
 
+
+def create_wedge(half_length=0.25, angle=30, spacing=3*1e-3):
+    """
+    angle in degrees
+    """
+    wedge_height = np.tan(angle * np.pi / 180) * half_length
+
+    # create points in height direction
+    x = np.array([0.], dtype=int)
+    y = np.array([0.], dtype=int)
+    y_reference = np.arange(0., wedge_height, spacing)
+    for i in range(len(y_reference)):
+        x_len = y_reference[i] / np.tan(angle * np.pi / 180)
+        x_local = np.arange(-x_len, x_len, spacing)
+        y_local = np.ones_like(x_local) * y_reference[i]
+        x = np.concatenate((x, x_local))
+        y = np.concatenate((y, y_local))
+
+    return x, y
+
+
+def create_wedge_1(half_length=0.25, angle=30, spacing=3*1e-3):
+    """
+    angle in degrees
+    """
+    # create a 2d block
+    # side length equal to the wedge hypotenuse value
+    radians = angle * np.pi / 180
+    height = half_length / np.cos(radians)
+    x_left, y_left = get_2d_block(dx=spacing,
+                                length=2. * half_length,
+                                height=height,
+                                center=[0., 0.])
+    z_left = np.zeros_like(x_left)
+    # rotate the block 30 degrees
+    x_left, y_left, z_left = rotate(x=x_left, y=y_left, z=z_left, angle=90-angle)
+    pa_left = get_particle_array(x=x_left, y=y_left, z=z_left, h=spacing)
+    min_x = np.min(x_left)
+    index = np.where(x_left == min_x)
+    y_cond = y_left[index[0]]
+    # delete indices which are above y
+    delete_cond = np.where(y_left > y_cond)
+    pa_left.remove_particles(delete_cond[0])
+    # x_left = pa_left.x
+    # y_left = pa_left.y
+    # z_left = pa_left.z
+
+    # create a 2d block
+    # side length equal to the wedge hypotenuse value
+    radians = angle * np.pi / 180
+    height = half_length / np.cos(radians)
+    x_right, y_right = get_2d_block(dx=spacing,
+                                    length=2. * half_length,
+                                    height=height,
+                                    center=[0., 0.])
+    z_right = np.zeros_like(x_right)
+    # rotate the block 30 degrees
+    x_right, y_right, z_right = rotate(x=x_right, y=y_right, z=z_right, angle=-(90-angle))
+    pa_right = get_particle_array(x=x_right, y=y_right, z=z_right, h=spacing)
+    # delete indices which are above y
+    delete_cond = np.where(y_right > y_cond)
+    pa_right.remove_particles(delete_cond[0])
+    # x_right = pa_right.x
+    # y_right = pa_right.y
+    # z_right = pa_right.z
+    remove_overlap_particles(pa_right, pa_left, 0.5 * spacing)
+    x_left = pa_left.x
+    y_left = pa_left.y
+    x_right = pa_right.x
+    y_right = pa_right.y
+
+    x = np.concatenate([x_right, x_left])
+    y = np.concatenate([y_right, y_left])
+    z = np.zeros_like(x)
+    return x, y
 
 def get_fluid_tank_3d(fluid_length,
                       fluid_height,
@@ -259,3 +335,9 @@ def get_files_at_given_times_from_log(files, times, logfile):
                     time_count += 1
                 file_count += 1
     return result
+
+# x, y, z = create_wedge_1()
+# plt.clf()
+# plt.axes().set_aspect('equal')
+# plt.scatter(x, y)
+# plt.show()
