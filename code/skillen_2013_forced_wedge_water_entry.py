@@ -1,9 +1,8 @@
-"""Skillen circular water entry
+"""Skillen wedge entry
 
-Run it using:
 
-python skillen_2013_circular_water_entry.py --openmp --use-edac --arti --alpha 0. --max-s 200 --pfreq 100 --nu 1e-3 --dx 0.0015
 
+https://www.sciencedirect.com/science/article/pii/S1001605808602097
 """
 import numpy as np
 import sys
@@ -348,6 +347,15 @@ class Problem(Application):
             data_y_penetration_sun_2018_SPH = np.loadtxt(os.path.join(
                 directory, 'sun_2018_falling_500_rho_SPH_data.csv'), delimiter=',')
         if self.rigid_body_rho == 1000.:
+            data_y_penetration_sun_2018_exp = np.loadtxt(os.path.join(
+                directory, 'sun_2018_falling_1000_rho_experimental_data.csv'), delimiter=',')
+            data_y_penetration_sun_2018_BEM = np.loadtxt(os.path.join(
+                directory, 'sun_2018_falling_1000_rho_BEM_data.csv'), delimiter=',')
+            # This is 200 resolution D / dx = 200
+            data_y_penetration_sun_2018_SPH = np.loadtxt(os.path.join(
+                directory, 'sun_2018_falling_1000_rho_SPH_data.csv'), delimiter=',')
+        else:
+            # Just repeat the same values as 1000 density
             data_y_penetration_sun_2018_exp = np.loadtxt(os.path.join(
                 directory, 'sun_2018_falling_1000_rho_experimental_data.csv'), delimiter=',')
             data_y_penetration_sun_2018_BEM = np.loadtxt(os.path.join(

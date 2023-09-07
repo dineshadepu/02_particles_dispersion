@@ -22,9 +22,11 @@ def get_particle_array_fluid(name, x, y, z=0., m=0., h=0., rho=0., ):
                             rho=rho,
                             m=m)
     add_properties(pa, 'arho', 'aconcentration', 'concentration', 'diff_coeff',
-                   'is_static', 'ap')
+                   'is_static', 'ap', 'auhat', 'avhat', 'awhat',
+                   'uhat', 'vhat', 'what', 'p0')
     add_properties(pa, 'm_frac')
     pa.add_constant('c0_ref', 0.)
+    pa.add_constant('p0_ref', 0.)
     pa.m_frac[:] = 1.
     # default property arrays to save out.
     pa.set_output_arrays([
@@ -140,6 +142,11 @@ class StateEquation(Equation):
         d_p[d_idx] = self.p0 * (d_rho[d_idx] / self.rho0 - self.b)
 
 
+class GTVFSetP0(Equation):
+    def initialize(self, d_idx, d_rho, d_p0, d_p, d_p0_ref):
+        d_p0[d_idx] = min(10. * abs(d_p[d_idx]), d_p0_ref[0])
+
+
 class DiffusionEquation(Equation):
     """
     Rate of change of concentration of a particle from Fick's law.
@@ -204,6 +211,33 @@ class MomentumEquationPressureGradient(Equation):
         d_aw[d_idx] += tmp * DWIJ[2]
 
 
+class ComputeAuHatGTVF(Equation):
+    def __init__(self, dest, sources):
+        super(ComputeAuHatGTVF, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_auhat, d_avhat, d_awhat):
+        d_auhat[d_idx] = 0.0
+        d_avhat[d_idx] = 0.0
+        d_awhat[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, d_rho, d_p0, s_rho, s_m, d_auhat, d_avhat,
+             d_awhat, WIJ, SPH_KERNEL, DWIJ, XIJ, RIJ, HIJ):
+        dwijhat = declare('matrix(3)')
+
+        rhoa = d_rho[d_idx]
+
+        rhoa21 = 1. / (rhoa * rhoa)
+
+        # add the background pressure acceleration
+        tmp = -d_p0[d_idx] * s_m[s_idx] * rhoa21
+
+        SPH_KERNEL.gradient(XIJ, RIJ, 0.5 * HIJ, dwijhat)
+
+        d_auhat[d_idx] += tmp * dwijhat[0]
+        d_avhat[d_idx] += tmp * dwijhat[1]
+        d_awhat[d_idx] += tmp * dwijhat[2]
+
+
 class SolidWallNoSlipBC(Equation):
     def __init__(self, dest, sources, nu):
         self.nu = nu
@@ -228,22 +262,27 @@ class SolidWallNoSlipBC(Equation):
 
 
 class FluidStep(IntegratorStep):
-    def stage1(self, d_idx, d_u, d_v, d_w, d_au, d_av, d_aw, d_is_static, dt):
+    def stage1(self, d_idx, d_u, d_v, d_w, d_au, d_av, d_aw, d_uhat, d_vhat,
+               d_what, d_auhat, d_avhat, d_awhat, d_is_static, dt):
         dtb2 = 0.5 * dt
         if d_is_static[d_idx] == 0.:
             d_u[d_idx] += dtb2 * d_au[d_idx]
             d_v[d_idx] += dtb2 * d_av[d_idx]
             d_w[d_idx] += dtb2 * d_aw[d_idx]
 
-    def stage2(self, d_idx, d_u, d_v, d_w, d_x, d_y, d_z, d_rho,
-               d_arho, d_concentration, d_aconcentration, d_ap, d_p, dt):
+            d_uhat[d_idx] = d_u[d_idx] + dtb2 * d_auhat[d_idx]
+            d_vhat[d_idx] = d_v[d_idx] + dtb2 * d_avhat[d_idx]
+            d_what[d_idx] = d_w[d_idx] + dtb2 * d_awhat[d_idx]
+
+    def stage2(self, d_idx, d_x, d_y, d_z, d_rho, d_arho, d_concentration,
+               d_aconcentration, d_ap, d_p, d_uhat, d_vhat, d_what, dt):
         d_rho[d_idx] += dt * d_arho[d_idx]
         d_concentration[d_idx] += dt * d_aconcentration[d_idx]
         d_p[d_idx] += dt * d_ap[d_idx]
 
-        d_x[d_idx] += dt * d_u[d_idx]
-        d_y[d_idx] += dt * d_v[d_idx]
-        d_z[d_idx] += dt * d_w[d_idx]
+        d_x[d_idx] += dt * d_uhat[d_idx]
+        d_y[d_idx] += dt * d_vhat[d_idx]
+        d_z[d_idx] += dt * d_what[d_idx]
 
     def stage3(self, d_idx, d_u, d_v, d_w, d_au, d_av, d_aw, d_is_static, dt):
         dtb2 = 0.5 * dt

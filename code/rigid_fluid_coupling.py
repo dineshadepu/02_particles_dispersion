@@ -13,7 +13,8 @@ from pysph.examples.solid_mech.impact import add_properties
 from pysph.sph.integrator import Integrator
 
 from fluids import (ContinuityEquation, StateEquation, MomentumEquationPressureGradient, FluidStep,
-                    SolidWallNoSlipBC, EDACEquation, DeltaSPHCorrection)
+                    SolidWallNoSlipBC, EDACEquation, DeltaSPHCorrection, ComputeAuHatGTVF,
+                    GTVFSetP0)
 from rigid_body import (SumUpExternalForces)
 
 
@@ -168,6 +169,8 @@ class ParticlesFluidScheme(Scheme):
         self.artificial_viscosity_with_boundary = False
         self.use_edac = False
         self.use_delta_sph = False
+        self.nrbc = False
+        self.pst = False
 
     def add_user_options(self, group):
         group.add_argument("--alpha", action="store", type=float, dest="alpha",
@@ -177,6 +180,16 @@ class ParticlesFluidScheme(Scheme):
         group.add_argument("--nu", action="store", type=float, dest="nu",
                            default=0.00,
                            help="Dynamics viscosity.")
+
+        add_bool_argument(group, 'nrbc',
+                          dest='nrbc',
+                          default=False,
+                          help='Use non reflecting boundary conditions')
+
+        add_bool_argument(group, 'pst',
+                          dest='pst',
+                          default=False,
+                          help='Use particle shifting for fluid particles')
 
         add_bool_argument(group, 'use-edac',
                           dest='use_edac',
@@ -196,7 +209,7 @@ class ParticlesFluidScheme(Scheme):
     def consume_user_options(self, options):
         vars = [
             'alpha', 'artificial_viscosity_with_boundary', 'use_edac',
-            'use_delta_sph', 'nu'
+            'use_delta_sph', 'nu', 'nrbc', 'pst'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in vars)
         self.configure(**data)
@@ -281,6 +294,8 @@ class ParticlesFluidScheme(Scheme):
         # =========================#
         stage2 = []
 
+        # Apply PST after stage 1 as particles are moved previously
+
         if self.use_edac == False:
             tmp = []
             for fluid in self.fluids:
@@ -289,39 +304,48 @@ class ParticlesFluidScheme(Scheme):
                                   sources=None,
                                   rho0=self.rho0,
                                   p0=self.pb))
-
             stage2.append(Group(equations=tmp, real=False))
 
-        # tmp = []
-        # for fluid in self.fluids:
-        #     tmp.append(
-        #         EvaluateCharacteristics(dest=fluid,
-        #                         sources=None,
-        #                         rho0=self.rho0,
-        #                         c0=self.c0))
+        if self.pst is True or self.nrbc is True:
+            tmp = []
+            for fluid in self.fluids:
+                tmp.append(GTVFSetP0(fluid, sources=None))
+            stage2.append(Group(equations=tmp, real=False))
 
-        # stage2.append(Group(equations=tmp, real=False))
+        if self.nrbc == True:
+            tmp = []
+            for fluid in self.fluids:
+                tmp.append(
+                    EvaluateCharacteristics(dest=fluid,
+                                    sources=None,
+                                    rho0=self.rho0,
+                                    c0=self.c0))
+
+            stage2.append(Group(equations=tmp, real=False))
 
         if len(self.boundaries) > 0:
             eqs = []
             for boundary in self.boundaries:
-                eqs.append(SetWallVelocity(dest=boundary, sources=self.fluids))
-                # eqs.append(ExtrapolateCharacteristics(dest=boundary, sources=self.fluids))
+                if self.nrbc == True:
+                    eqs.append(ExtrapolateCharacteristics(dest=boundary, sources=self.fluids))
+                else:
+                    eqs.append(SetWallVelocity(dest=boundary, sources=self.fluids))
             stage2.append(Group(equations=eqs, real=False))
 
         if len(self.boundaries) > 0:
             eqs = []
             for boundary in self.boundaries:
-                eqs.append(
-                    SourceNumberDensity(dest=boundary, sources=self.fluids))
-                eqs.append(
-                    SolidWallPressureBC(dest=boundary, sources=self.fluids,
-                                        gx=self.gx, gy=self.gy, gz=self.gz))
-                eqs.append(
-                    ClampWallPressure(dest=boundary, sources=None))
-                # eqs.append(EvaluateSlipWallVelocity(dest=boundary, sources=None, rho0=self.rho0, c0=self.c0))
-                # eqs.append(EvaluateSlipWallPressure(dest=boundary, sources=None))
-
+                if self.nrbc == True:
+                    eqs.append(EvaluateSlipWallVelocity(dest=boundary, sources=None, rho0=self.rho0, c0=self.c0))
+                    eqs.append(EvaluateSlipWallPressure(dest=boundary, sources=None))
+                else:
+                    eqs.append(
+                        SourceNumberDensity(dest=boundary, sources=self.fluids))
+                    eqs.append(
+                        SolidWallPressureBC(dest=boundary, sources=self.fluids,
+                                            gx=self.gx, gy=self.gy, gz=self.gz))
+                    eqs.append(
+                        ClampWallPressure(dest=boundary, sources=None))
 
             stage2.append(Group(equations=eqs, real=False))
 
@@ -372,6 +396,11 @@ class ParticlesFluidScheme(Scheme):
                 MomentumEquationPressureGradient(dest=fluid, sources=all,
                                                  gx=self.gx, gy=self.gy,
                                                  gz=self.gz), )
+
+            if self.pst is True or self.nrbc is True:
+                eqs.append(
+                    ComputeAuHatGTVF(dest=fluid,
+                                     sources=all))
 
         stage2.append(Group(equations=eqs, real=True))
 

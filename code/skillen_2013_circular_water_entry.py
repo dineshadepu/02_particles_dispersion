@@ -177,19 +177,23 @@ class Problem(Application):
         fluid = get_particle_array_fluid(name='fluid', x=xf, y=yf, z=zf, h=self.h, m=m, rho=self.fluid_rho)
         tank = get_particle_array_boundary(name='tank', x=xt, y=yt, z=zt, h=self.h, m=m, rho=self.fluid_rho)
 
-        props = ['j3', 'pta', 'j3v', 'j2v', 'j2', 'vta', 'uta', 'j1'] # required for non-reflecting boundary
-        for pa in (fluid, tank):
-            for prop in props:
-                pa.add_property(prop)
-            pa.pta[:] = 0.0
-            pa.uta[:] = 0.0
-            pa.vta[:] = 0.0
+        if self.options.nrbc == True:
+            props = ['j3', 'pta', 'j3v', 'j2v', 'j2', 'vta', 'uta', 'j1'] # required for non-reflecting boundary
+            for pa in (fluid, tank):
+                for prop in props:
+                    pa.add_property(prop)
+                pa.pta[:] = 0.0
+                pa.uta[:] = 0.0
+                pa.vta[:] = 0.0
 
-        get_normals(tank, dim=2, domain=self.domain)
+            get_normals(tank, dim=2, domain=self.domain)
 
         # set the pressure of the fluid
         fluid.p[:] = - self.fluid_rho * self.gy * (max(fluid.y) - fluid.y[:])
         fluid.c0_ref[0] = self.c0
+        fluid.p0_ref[0] = self.p0
+
+        fluid.add_output_arrays(['auhat', 'avhat', 'awhat', 'uhat', 'vhat', 'what'])
 
         # =========================
         # create rigid body
