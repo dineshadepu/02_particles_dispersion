@@ -177,8 +177,13 @@ class Problem(Application):
         fluid = get_particle_array_fluid(name='fluid', x=xf, y=yf, z=zf, h=self.h, m=m, rho=self.fluid_rho)
         tank = get_particle_array_boundary(name='tank', x=xt, y=yt, z=zt, h=self.h, m=m, rho=self.fluid_rho)
 
+        # set the pressure of the fluid
+        fluid.p[:] = - self.fluid_rho * self.gy * (max(fluid.y) - fluid.y[:])
+        fluid.c0_ref[0] = self.c0
+        fluid.p0_ref[0] = self.p0
+
         if self.options.nrbc == True:
-            props = ['j3', 'pta', 'j3v', 'j2v', 'j2', 'vta', 'uta', 'j1'] # required for non-reflecting boundary
+            props = ['j3', 'pta', 'j3v', 'j2v', 'j2', 'vta', 'uta', 'j1', 'wij'] # required for non-reflecting boundary
             for pa in (fluid, tank):
                 for prop in props:
                     pa.add_property(prop)
@@ -188,10 +193,7 @@ class Problem(Application):
 
             get_normals(tank, dim=2, domain=self.domain)
 
-        # set the pressure of the fluid
-        fluid.p[:] = - self.fluid_rho * self.gy * (max(fluid.y) - fluid.y[:])
-        fluid.c0_ref[0] = self.c0
-        fluid.p0_ref[0] = self.p0
+        self._get_initial_average_pressure(fluid, tank)
 
         fluid.add_output_arrays(['auhat', 'avhat', 'awhat', 'uhat', 'vhat', 'what'])
 
@@ -243,6 +245,24 @@ class Problem(Application):
         # =========================
 
         return [fluid, tank, rigid_body]
+
+    def _get_initial_average_pressure(self, fluid, tank):
+        from pysph.tools.sph_evaluator import SPHEvaluator
+        from pysph.sph.wc.edac import SourceNumberDensity, SolidWallPressureBC
+
+        eqs = []
+        eqs.append(
+            SourceNumberDensity(dest='tank', sources=['fluid']))
+        eqs.append(
+            SolidWallPressureBC(dest='tank', sources=['fluid'],
+                                gx=self.gx, gy=self.gy, gz=self.gz))
+
+        sph_eval = SPHEvaluator([fluid, tank], equations=eqs, dim=2)
+        sph_eval.evaluate()
+
+        tank.pta[:] = tank.p[:]
+        fluid.pta[:] = fluid.p[:]
+
 
     def create_scheme(self):
         wcsph = ParticlesFluidScheme(
