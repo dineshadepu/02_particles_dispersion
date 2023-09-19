@@ -193,7 +193,7 @@ class Problem(Application):
 
             get_normals(tank, dim=2, domain=self.domain)
 
-        self._get_initial_average_pressure(fluid, tank)
+            self._get_initial_average_pressure(fluid, tank)
 
         fluid.add_output_arrays(['auhat', 'avhat', 'awhat', 'uhat', 'vhat', 'what'])
 
@@ -223,7 +223,7 @@ class Problem(Application):
                                                    x=x,
                                                    y=y,
                                                    z=z,
-                                                   h=h,
+                                                   h=1.2 * h,
                                                    m_rb=m,
                                                    m=self.fluid_rho * self.dx**self.dim,
                                                    rho=self.fluid_rho,
@@ -240,6 +240,7 @@ class Problem(Application):
         indices_rb_inside_cond = (rigid_body.normal_norm == 0.)
         indices = np.where(indices_rb_inside_cond == True)
         rigid_body.remove_particles(indices[0])
+        rigid_body.h[:] = h
         # =========================
         # create rigid body ends
         # =========================

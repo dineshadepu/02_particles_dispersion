@@ -27,8 +27,33 @@ from rigid_body import (get_particle_array_rigid_body,
                         get_center_of_mass,
                         color_diagonal_of_rb,
                         AdjustRigidBodyPositionInPipe)
+from pysph.sph.equation import Equation, Group
 from rigid_fluid_coupling import (ParticlesFluidScheme,
                                   add_rigid_fluid_properties_to_rigid_body)
+
+
+def check_time_make_zero(t, dt):
+    if t < 10.0:
+        return True
+    else:
+        return False
+
+
+class MakeForcesZeroOnRigidBody(Equation):
+    def initialize(self, d_idx, d_fx, d_fy, d_fz):
+        d_fx[d_idx] = 0.
+        d_fy[d_idx] = 0.
+        d_fz[d_idx] = 0.
+
+    def reduce(self, dst, t, dt):
+        frc = declare('object')
+        trq = declare('object')
+
+        frc = dst.force
+        trq = dst.torque
+
+        frc[:] = 0
+        trq[:] = 0
 
 
 class Ng2021TwoBodiesInShearFlow(Application):
@@ -107,12 +132,12 @@ class Ng2021TwoBodiesInShearFlow(Application):
         self.c0 = 10.0 * self.Umax
         self.mach_no = self.vref / self.c0
         # set the viscosity based on the particle reynolds no
-        tmp = self.Umax * self.rigid_body_diameter**2. / (self.fluid_height * self.re)
-        self.nu = tmp * self.fluid_rho
-        print("viscosity is: ", self.nu)
-        self.tf = 50.
+        self.nu = self.Umax * self.rigid_body_diameter**2. / (self.fluid_height * self.re)
+        self.mu = self.nu * self.fluid_rho
+        print("Kinematic viscosity is: ", self.nu)
+        self.tf = 50. + 10.
         self.p0 = self.fluid_rho*self.c0**2
-        self.alpha = 0.05
+        self.alpha = 0.02
 
         # Setup default parameters.
         # dt_cfl = 0.25 * self.h / (self.c0 + self.vref)
@@ -287,6 +312,7 @@ class Ng2021TwoBodiesInShearFlow(Application):
             rigid_bodies=["rigid_body"],
             dim=0.,
             rho0=0.,
+            h=0.,
             c0=0.,
             pb=0.,
             nu=0.,
@@ -301,6 +327,7 @@ class Ng2021TwoBodiesInShearFlow(Application):
         scheme.configure(
             dim=self.dim,
             rho0=self.fluid_rho,
+            h=self.h,
             c0=self.c0,
             pb=self.p0,
             nu=self.nu,
@@ -320,6 +347,15 @@ class Ng2021TwoBodiesInShearFlow(Application):
                 "rigid_body", sources=None, x_min=self.x_min, x_max=self.x_max))
 
         eqns.groups[0].append(Group(adjust_eqs))
+
+        # Apply external force
+        zero_frc = []
+        zero_frc.append(
+            MakeForcesZeroOnRigidBody("rigid_body", sources=None))
+
+        # print(eqns.groups)
+        eqns.groups[-1].append(Group(equations=zero_frc,
+                                         condition=check_time_make_zero))
 
         return eqns
 
