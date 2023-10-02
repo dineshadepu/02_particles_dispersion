@@ -121,9 +121,9 @@ def create_wedge_1(half_length=0.25, angle=30, spacing=3*1e-3):
     radians = angle * np.pi / 180
     height = half_length / np.cos(radians)
     x_left, y_left = get_2d_block(dx=spacing,
-                                length=2. * half_length,
-                                height=height,
-                                center=[0., 0.])
+                                  length=2. * half_length,
+                                  height=height,
+                                  center=[0., 0.])
     z_left = np.zeros_like(x_left)
     # rotate the block 30 degrees
     x_left, y_left, z_left = rotate(x=x_left, y=y_left, z=z_left, angle=90-angle)
@@ -156,6 +156,18 @@ def create_wedge_1(half_length=0.25, angle=30, spacing=3*1e-3):
     # x_right = pa_right.x
     # y_right = pa_right.y
     # z_right = pa_right.z
+
+    # move the right particle array so that it aligns pointly with the bottom
+    min_y_left = np.min(pa_left.y)
+    index = np.where(pa_left.y == min_y_left)
+    x_min_y_left = pa_left.x[index[0]]
+
+    min_y_right = np.min(pa_right.y)
+    index = np.where(pa_right.y == min_y_right)
+    x_min_y_right = pa_right.x[index[0]]
+    # now move the right block
+    pa_right.x[:] += x_min_y_left - x_min_y_right
+
     remove_overlap_particles(pa_right, pa_left, 0.5 * spacing)
     x_left = pa_left.x
     y_left = pa_left.y

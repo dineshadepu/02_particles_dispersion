@@ -1,8 +1,8 @@
-"""Skillen wedge entry
+"""Sun water wedge entry
 
 
 
-https://www.sciencedirect.com/science/article/pii/S1001605808602097
+https://www.sciencedirect.com/science/article/pii/S0029801815000323
 """
 import numpy as np
 import sys
@@ -69,13 +69,17 @@ class Problem(Application):
         #     "--remesh", action="store", type=float, dest="remesh", default=0,
         #     help="Remeshing frequency (setting it to zero disables it)."
         # )
-        group.add_argument("--N", action="store", type=int, dest="N",
-                           default=150,
-                           help="Number of particles in diamter of a rigid cylinder")
+        # group.add_argument("--N", action="store", type=int, dest="N",
+        #                    default=150,
+        #                    help="Number of particles in diamter of a rigid cylinder")
 
-        group.add_argument("--rigid-body-rho", action="store", type=float,
-                           dest="rigid_body_rho", default=500,
-                           help="Density of rigid cylinder")
+        group.add_argument("--spacing", action="store", type=float, dest="dx",
+                           default=5. * 1e-3,
+                           help="Spacing between the particles")
+
+        # group.add_argument("--rigid-body-rho", action="store", type=float,
+        #                    dest="rigid_body_rho", default=500,
+        #                    help="Density of rigid cylinder")
 
     def consume_user_options(self):
         # ======================
@@ -89,24 +93,24 @@ class Problem(Application):
         # Dimensions
         # ======================
         # x - axis
-        self.fluid_length = 2.
+        self.fluid_length = 2.5
         # y - axis
-        self.fluid_height = 0.3
+        self.fluid_height = 1.1
         # z - axis
         self.fluid_depth = 0.0
 
         # x - axis
-        self.tank_length = 1.
+        self.tank_length = 2.5
         # y - axis
-        self.tank_height = 0.4
+        self.tank_height = 1.3
         # z - axis
         self.tank_depth = 0.0
         self.tank_layers = 3
 
-        self.wedge_length = 0.5
-        self.wedge_angle = 30.
+        self.wedge_length = 1.2
+        self.wedge_angle = 25.
         self.rigid_body_center = [0.00, 0.3 + 0.5]
-        self.rigid_body_velocity = 6.15
+        self.rigid_body_velocity = 5.05
         # ======================
         # Dimensions ends
         # ======================
@@ -115,7 +119,16 @@ class Problem(Application):
         # Physical properties and consants
         # ======================
         self.fluid_rho = 1000.
-        self.rigid_body_rho = self.options.rigid_body_rho
+
+        # compute the density of the wedge from the weight
+        self.rigid_body_mass = 94  # kgs
+        # area of the wedge with the given dimentions
+        rad = self.wedge_angle * np.pi / 180
+        tmp1 = self.wedge_length / 2.
+        half_area = 1/2 * tmp1 * (tmp1 * np.tan(rad))
+        area = 2 * half_area
+        self.rigid_body_rho = self.rigid_body_mass / area
+        print("rho is", self.rigid_body_rho)
 
         self.gx = 0.
         self.gy = -9.81
@@ -129,14 +142,13 @@ class Problem(Application):
         # Numerical properties
         # ======================
         self.hdx = 1.
-        self.N = self.options.N
-        self.dx = self.wedge_length / self.N
+        self.dx = self.options.dx
         self.h = self.hdx * self.dx
         self.vref = np.sqrt(2. * abs(self.gy) * self.fluid_height)
         self.c0 = 10 * self.vref
         self.mach_no = self.vref / self.c0
         self.nu = self.options.nu
-        self.tf = 0.025
+        self.tf = 40 * 1e-3
         self.p0 = self.fluid_rho*self.c0**2
         self.alpha = 0.00
 
@@ -150,7 +162,7 @@ class Problem(Application):
 
         self.dt = min(dt_cfl, dt_force)
         print("Computed stable dt is: ", self.dt)
-        self.dt = 2 * 1e-6
+        self.dt = 1 * 1e-5
         print("But we set it to: ", self.dt)
         # ==========================
         # Numerical properties ends
@@ -302,7 +314,6 @@ class Problem(Application):
         ''')
 
     def post_process(self, fname):
-
         import matplotlib.pyplot as plt
         from pysph.solver.utils import load, get_files
         from pysph.solver.utils import iter_output
@@ -318,101 +329,120 @@ class Problem(Application):
         y_0 = rigid_body.xcm[1]
 
         y = []
-        v = []
+        v_vel_current = []
         u = []
         t = []
+        # vertical force (Fig 16 b)
+        fcm_y_current = []
 
         for sd, rigid_body in iter_output(files, 'rigid_body'):
             _t = sd['t']
+            print(_t)
             y.append(rigid_body.xcm[1])
             u.append(rigid_body.vcm[0])
-            v.append(rigid_body.vcm[1])
+            v_vel_current.append(rigid_body.vcm[1])
+            fcm_y_current.append(rigid_body.force[1])
             t.append(_t)
+
         # non dimentionalize it
-        penetration_current = (np.asarray(y)[::1] - y_0) / self.wedge_length
-        t_current = np.asarray(t)[::1] * (9.81 / self.wedge_length)**0.5
+        # penetration_current = (np.asarray(y)[::1] - y_0) / self.wedge_length
+        t_current = np.asarray(t) * 1e3
+        v_vel_current = np.asarray(v_vel_current)
 
         # Data from literature
         path = os.path.abspath(__file__)
         directory = os.path.dirname(path)
 
         # load the data
+        # ==========
+        # Velocity data
+        # ==========
         # We use Sun 2018 accurate and efficient water entry paper data for validation
-        if self.rigid_body_rho == 500.:
-            data_y_penetration_sun_2018_exp = np.loadtxt(os.path.join(
-                directory, 'sun_2018_falling_500_rho_experimental_data.csv'), delimiter=',')
-            data_y_penetration_sun_2018_BEM = np.loadtxt(os.path.join(
-                directory, 'sun_2018_falling_500_rho_BEM_data.csv'), delimiter=',')
-            # This is 200 resolution D / dx = 200
-            data_y_penetration_sun_2018_SPH = np.loadtxt(os.path.join(
-                directory, 'sun_2018_falling_500_rho_SPH_data.csv'), delimiter=',')
-        if self.rigid_body_rho == 1000.:
-            data_y_penetration_sun_2018_exp = np.loadtxt(os.path.join(
-                directory, 'sun_2018_falling_1000_rho_experimental_data.csv'), delimiter=',')
-            data_y_penetration_sun_2018_BEM = np.loadtxt(os.path.join(
-                directory, 'sun_2018_falling_1000_rho_BEM_data.csv'), delimiter=',')
-            # This is 200 resolution D / dx = 200
-            data_y_penetration_sun_2018_SPH = np.loadtxt(os.path.join(
-                directory, 'sun_2018_falling_1000_rho_SPH_data.csv'), delimiter=',')
-        else:
-            # Just repeat the same values as 1000 density
-            data_y_penetration_sun_2018_exp = np.loadtxt(os.path.join(
-                directory, 'sun_2018_falling_1000_rho_experimental_data.csv'), delimiter=',')
-            data_y_penetration_sun_2018_BEM = np.loadtxt(os.path.join(
-                directory, 'sun_2018_falling_1000_rho_BEM_data.csv'), delimiter=',')
-            # This is 200 resolution D / dx = 200
-            data_y_penetration_sun_2018_SPH = np.loadtxt(os.path.join(
-                directory, 'sun_2018_falling_1000_rho_SPH_data.csv'), delimiter=',')
+        data_v_vel_sun_2015_exp = np.loadtxt(os.path.join(
+            directory, 'sun_2015_2d_water_wedge_entry_experimental_Yettou_2016_velocity_data.csv'), delimiter=',')
+        data_v_vel_sun_2015_BEM = np.loadtxt(os.path.join(
+            directory, 'sun_2015_2d_water_wedge_entry_BEM_Zhao_Faltinsen_1993_velocity_data.csv'), delimiter=',')
+        # This is dx = 2.5 mm resolution
+        data_v_vel_sun_2015_SPH = np.loadtxt(os.path.join(
+            directory, 'sun_2015_2d_water_wedge_entry_SPH_2_5_mm_Sun_2015_velocity_data.csv'), delimiter=',')
 
-        t_exp, penetration_exp = data_y_penetration_sun_2018_exp[:, 0], data_y_penetration_sun_2018_exp[:, 1]
-        t_BEM, penetration_BEM = data_y_penetration_sun_2018_BEM[:, 0], data_y_penetration_sun_2018_BEM[:, 1]
-        t_SPH, penetration_SPH = data_y_penetration_sun_2018_SPH[:, 0], data_y_penetration_sun_2018_SPH[:, 1]
+        # ==========
+        # Force data
+        # ==========
+        data_force_sun_2015_SPH = np.loadtxt(os.path.join(
+            directory, 'sun_2015_2d_water_wedge_entry_SPH_2_5_mm_Sun_2015_force_data.csv'), delimiter=',')
+
+        t_exp_v_vel, v_vel_exp = data_v_vel_sun_2015_exp[:, 0], data_v_vel_sun_2015_exp[:, 1]
+        t_BEM_v_vel, v_vel_BEM = data_v_vel_sun_2015_BEM[:, 0], data_v_vel_sun_2015_BEM[:, 1]
+        t_SPH_v_vel, v_vel_SPH = data_v_vel_sun_2015_SPH[:, 0], data_v_vel_sun_2015_SPH[:, 1]
+        t_SPH_fcm_y, fcm_y_SPH = data_force_sun_2015_SPH[:, 0], data_force_sun_2015_SPH[:, 1]
         # =================
         # sort webplot data
-        p = t_SPH.argsort()
-        t_SPH = t_SPH[p]
-        penetration_SPH = penetration_SPH[p]
+        p = t_SPH_v_vel.argsort()
+        t_SPH_v_vel = t_SPH_v_vel[p]
+        v_vel_SPH = v_vel_SPH[p]
         # t_SPH = np.delete(t_SPH, np.where(t_SPH > 1.65 and t_SPH < 1.75))
         # penetration_SPH = np.delete(penetration_SPH,  np.where(t_SPH > 1.65 and t_SPH < 1.75))
-        t_SPH = np.delete(t_SPH, -4)
-        penetration_SPH = np.delete(penetration_SPH, -4)
+        # t_SPH = np.delete(t_SPH, -4)
+        # penetration_SPH = np.delete(penetration_SPH, -4)
 
-        p = t_BEM.argsort()
-        t_BEM = t_BEM[p]
-        penetration_BEM = penetration_BEM[p]
+        p = t_BEM_v_vel.argsort()
+        t_BEM_v_vel = t_BEM_v_vel[p]
+        v_vel_BEM = v_vel_BEM[p]
         # sort webplot data
         # =================
 
         res = os.path.join(self.output_dir, "results.npz")
         np.savez(res,
-                 t_exp=t_exp,
-                 penetration_exp=penetration_exp,
-                 t_BEM=t_BEM,
-                 penetration_BEM=penetration_BEM,
-                 t_SPH=t_SPH,
-                 penetration_SPH=penetration_SPH,
+                 t_exp_v_vel=t_exp_v_vel,
+                 v_vel_exp=v_vel_exp,
+                 t_BEM_v_vel=t_BEM_v_vel,
+                 v_vel_BEM=v_vel_BEM,
+                 t_SPH_v_vel=t_SPH_v_vel,
+                 v_vel_SPH=v_vel_SPH,
+                 t_SPH_fcm_y=t_SPH_fcm_y,
                  t_current=t_current,
-                 penetration_current=-penetration_current)
+                 v_vel_current=v_vel_current,
+                 fcm_y_current=fcm_y_current,
+                 fcm_y_SPH=fcm_y_SPH
+                 )
         data = np.load(res)
 
         # ========================
-        # Variation of y penetration
+        # Variation of y velocity
         # ========================
         plt.clf()
-        plt.plot(t_exp, penetration_exp, "^", label='Experimental')
-        plt.plot(t_SPH, penetration_SPH, "-+", label='SPH')
-        plt.plot(t_BEM, penetration_BEM, "--", label='BEM')
-        plt.plot(t_current, -penetration_current, "-", label='Current')
+        plt.plot(t_exp_v_vel, v_vel_exp, "^", label='EXP. (Yettou et al., 2006)')
+        plt.plot(t_SPH_v_vel, v_vel_SPH, "-+", label='dx = 2.5 mm, SPH (Sun et al., 2015)')
+        plt.plot(t_BEM_v_vel, v_vel_BEM, "--", label='BEM (Zhao and Faltinsen, 1993)')
+        plt.plot(t_current, -v_vel_current, "-", label='Current')
 
-        plt.title('Variation in y-penetration')
-        plt.xlabel('t (g / D)^{1/2}')
-        plt.ylabel('Penetration (y - y_0)/D')
+        plt.title('Variation in velocity')
+        plt.xlabel('Time (ms)')
+        plt.ylabel('Wedge velocity (m/s)')
         plt.legend()
-        fig = os.path.join(os.path.dirname(fname), "penetration_vs_t.png")
+        fig = os.path.join(os.path.dirname(fname), "velocity_vs_t.png")
         plt.savefig(fig, dpi=300)
+        # ============================
+        # Variation of y velocity ends
+        # ============================
+
         # ========================
-        # x amplitude figure
+        # Variation of force
         # ========================
+        plt.clf()
+        plt.plot(t_SPH_fcm_y, fcm_y_SPH, "-^", label='SPH (dx = 2.5 mm) Sun et al 2015')
+        plt.plot(t_current, fcm_y_current, "-", label='Current')
+
+        plt.title('Variation in vertical force')
+        plt.xlabel('Time (ms)')
+        plt.ylabel('Force (N)')
+        plt.legend()
+        fig = os.path.join(os.path.dirname(fname), "force_vs_t.png")
+        plt.savefig(fig, dpi=300)
+        # ============================
+        # Variation of force ends
+        # ============================
 
 
 if __name__ == '__main__':

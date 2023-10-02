@@ -142,6 +142,17 @@ class StateEquation(Equation):
         d_p[d_idx] = self.p0 * (d_rho[d_idx] / self.rho0 - self.b)
 
 
+class StateEquationInternalFlow(Equation):
+    def __init__(self, dest, sources, p0, rho0, b=1.0):
+        self.b = b
+        self.p0 = p0
+        self.rho0 = rho0
+        super(StateEquationInternalFlow, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_p, d_rho):
+        d_p[d_idx] = self.p0 * (d_rho[d_idx] / self.rho0 - self.b) + self.p0
+
+
 class GTVFSetP0(Equation):
     def initialize(self, d_idx, d_rho, d_p0, d_p, d_p0_ref):
         d_p0[d_idx] = min(10. * abs(d_p[d_idx]), d_p0_ref[0])

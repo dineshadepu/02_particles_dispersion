@@ -12,9 +12,10 @@ from pysph.examples.solid_mech.impact import add_properties
 
 from pysph.sph.integrator import Integrator
 
-from fluids import (ContinuityEquation, StateEquation, MomentumEquationPressureGradient, FluidStep,
-                    SolidWallNoSlipBC, EDACEquation, DeltaSPHCorrection, ComputeAuHatGTVF,
-                    GTVFSetP0)
+from fluids import (ContinuityEquation, StateEquation,
+                    StateEquationInternalFlow, MomentumEquationPressureGradient,
+                    FluidStep, SolidWallNoSlipBC, EDACEquation,
+                    DeltaSPHCorrection, ComputeAuHatGTVF, GTVFSetP0)
 from rigid_body import (SumUpExternalForces)
 
 
@@ -107,7 +108,7 @@ class ExtrapolateCharacteristics(Equation):
             d_j3v[d_idx] /= d_wij[d_idx]
 
 
-class RigidFluidForce(Equation):
+class RigidFluidPressureForce(Equation):
     """Force on rigid body due to the interaction with fluid.
     The force equation is taken from SPH-DCDEM paper by Canelas
 
@@ -116,7 +117,7 @@ class RigidFluidForce(Equation):
     """
     def __init__(self, dest, sources, nu=0):
         self.nu = nu
-        super(RigidFluidForce, self).__init__(dest, sources)
+        super(RigidFluidPressureForce, self).__init__(dest, sources)
 
     def initialize(self, d_idx, d_fx, d_fy, d_fz):
         d_fx[d_idx] = 0.
@@ -148,6 +149,55 @@ class RigidFluidForce(Equation):
         d_fz[d_idx] += d_m[d_idx] * fac * VIJ[2]
 
 
+class RigidFluidViscousForce(Equation):
+    """Force on rigid body due to the interaction with fluid.
+    The force equation is taken from SPH-DCDEM paper by Canelas
+
+    nu: dynamics viscosity of the fluid
+
+    """
+    def __init__(self, dest, sources, nu=0):
+        self.nu = nu
+        super(RigidFluidViscousForce, self).__init__(dest, sources)
+
+    def loop(self, d_rho, s_rho, d_idx, s_idx, d_p, s_p, s_m, d_m, d_fx, d_fy,
+             d_fz, DWIJ, XIJ, RIJ, SPH_KERNEL, HIJ, R2IJ, EPS, VIJ):
+        # viscous forces
+        xdotdij = DWIJ[0]*XIJ[0] + DWIJ[1]*XIJ[1] + DWIJ[2]*XIJ[2]
+        tmp_1 = s_m[s_idx] * 4 * self.nu * xdotdij
+        tmp_2 = (d_rho[d_idx] + s_rho[s_idx]) * (R2IJ + EPS)
+        fac = tmp_1 / tmp_2
+
+        d_fx[d_idx] += d_m[d_idx] * fac * VIJ[0]
+        d_fy[d_idx] += d_m[d_idx] * fac * VIJ[1]
+        d_fz[d_idx] += d_m[d_idx] * fac * VIJ[2]
+
+
+class RigidFluidViscousNoSlipForce(Equation):
+    """Force on rigid body due to the interaction with fluid.
+    The force equation is taken from SPH-DCDEM paper by Canelas
+
+    nu: dynamics viscosity of the fluid
+
+    """
+    def __init__(self, dest, sources, nu=0):
+        self.nu = nu
+        super(RigidFluidViscousNoSlipForce, self).__init__(dest, sources)
+
+    def loop(self, d_rho, s_rho, d_idx, s_idx, d_p, s_p, s_m, d_m, d_fx, d_fy,
+             d_fz, d_ug, d_vg, d_wg, s_u, s_v, s_w,
+             DWIJ, XIJ, R2IJ, EPS):
+        # viscous forces
+        xdotdij = DWIJ[0]*XIJ[0] + DWIJ[1]*XIJ[1] + DWIJ[2]*XIJ[2]
+        tmp_1 = s_m[s_idx] * 4 * self.nu * xdotdij
+        tmp_2 = (d_rho[d_idx] + s_rho[s_idx]) * (R2IJ + EPS)
+        fac = tmp_1 / tmp_2
+
+        d_fx[d_idx] += d_m[d_idx] * fac * (d_ug[d_idx] - s_u[s_idx])
+        d_fy[d_idx] += d_m[d_idx] * fac * (d_vg[d_idx] - s_v[s_idx])
+        d_fz[d_idx] += d_m[d_idx] * fac * (d_wg[d_idx] - s_w[s_idx])
+
+
 class ParticlesFluidScheme(Scheme):
     def __init__(self, fluids, boundaries, rigid_bodies, dim, c0, nu, rho0, h, pb=0.0,
                  gx=0.0, gy=0.0, gz=0.0, alpha=0.0):
@@ -167,10 +217,12 @@ class ParticlesFluidScheme(Scheme):
         self.solver = None
 
         self.artificial_viscosity_with_boundary = False
+        self.no_slip_rigid_body = False
         self.use_edac = False
         self.use_delta_sph = False
         self.nrbc = False
         self.pst = False
+        self.internal_flow_add_p0 = False
 
     def add_user_options(self, group):
         group.add_argument("--alpha", action="store", type=float, dest="alpha",
@@ -206,10 +258,21 @@ class ParticlesFluidScheme(Scheme):
                           default=False,
                           help='Use boundary in artificial viscosity computation')
 
+        add_bool_argument(group, 'no-slip-rigid-body',
+                          dest='no_slip_rigid_body',
+                          default=False,
+                          help='Use no slip condition on rigid body')
+
+        add_bool_argument(group, 'internal-flow-add-p0',
+                          dest='internal_flow_add_p0',
+                          default=False,
+                          help='Add background pressure p0 to all particles, if internal flow')
+
     def consume_user_options(self, options):
         vars = [
             'alpha', 'artificial_viscosity_with_boundary', 'use_edac',
-            'use_delta_sph', 'nu', 'nrbc', 'pst'
+            'use_delta_sph', 'nu', 'nrbc', 'pst',
+            'no_slip_rigid_body', 'internal_flow_add_p0'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in vars)
         self.configure(**data)
@@ -298,12 +361,21 @@ class ParticlesFluidScheme(Scheme):
 
         if self.use_edac == False:
             tmp = []
-            for fluid in self.fluids:
-                tmp.append(
-                    StateEquation(dest=fluid,
-                                  sources=None,
-                                  rho0=self.rho0,
-                                  p0=self.pb))
+            if self.internal_flow_add_p0 is True:
+                for fluid in self.fluids:
+                    tmp.append(
+                        StateEquationInternalFlow(dest=fluid,
+                                                  sources=None,
+                                                  rho0=self.rho0,
+                                                  p0=self.pb))
+            else:
+                for fluid in self.fluids:
+                    tmp.append(
+                        StateEquation(dest=fluid,
+                                      sources=None,
+                                      rho0=self.rho0,
+                                      p0=self.pb))
+
             stage2.append(Group(equations=tmp, real=False))
 
         if self.pst is True or self.nrbc is True:
@@ -331,6 +403,13 @@ class ParticlesFluidScheme(Scheme):
                 else:
                     eqs.append(SetWallVelocity(dest=boundary, sources=self.fluids))
             stage2.append(Group(equations=eqs, real=False))
+
+        if self.no_slip_rigid_body is True:
+            if len(self.rigid_bodies) > 0:
+                eqs = []
+                for body in self.rigid_bodies:
+                    eqs.append(SetWallVelocity(dest=body, sources=self.fluids))
+                stage2.append(Group(equations=eqs, real=False))
 
         if len(self.boundaries) > 0:
             eqs = []
@@ -383,9 +462,22 @@ class ParticlesFluidScheme(Scheme):
             if self.nu > 0.0:
                 eqs.append(
                     MomentumEquationViscosity(
-                        dest=fluid, sources=self.fluids+self.rigid_bodies,
+                        dest=fluid, sources=self.fluids,
                         nu=self.nu)
                 )
+                if self.no_slip_rigid_body is False:
+                    eqs.append(
+                        MomentumEquationViscosity(
+                            dest=fluid, sources=self.rigid_bodies,
+                            nu=self.nu)
+                    )
+                else:
+                    eqs.append(
+                        SolidWallNoSlipBC(
+                            dest=fluid, sources=self.rigid_bodies, nu=self.nu
+                        )
+                    )
+
                 if len(self.boundaries) > 0:
                     eqs.append(
                         SolidWallNoSlipBC(
@@ -413,7 +505,13 @@ class ParticlesFluidScheme(Scheme):
             eqs = []
             for body in self.rigid_bodies:
                 eqs.append(
-                    RigidFluidForce(dest=body, sources=self.fluids, nu=self.nu))
+                    RigidFluidPressureForce(dest=body, sources=self.fluids, nu=self.nu))
+                if self.no_slip_rigid_body is False:
+                    eqs.append(
+                        RigidFluidViscousForce(dest=body, sources=self.fluids, nu=self.nu))
+                else:
+                    eqs.append(
+                        RigidFluidViscousNoSlipForce(dest=body, sources=self.fluids, nu=self.nu))
 
             stage2.append(Group(equations=eqs, real=True))
 

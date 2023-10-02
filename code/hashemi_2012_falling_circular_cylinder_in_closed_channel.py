@@ -37,7 +37,7 @@ from rigid_fluid_coupling import (ParticlesFluidScheme,
                                   add_rigid_fluid_properties_to_rigid_body)
 
 def check_time_make_zero(t, dt):
-    if t < 0.0:
+    if t < 0.1:
         return True
     else:
         return False
@@ -62,20 +62,25 @@ class MakeForcesZeroOnRigidBody(Equation):
 
 class Problem(Application):
     def add_user_options(self, group):
-        group.add_argument(
-            "--re", action="store", type=float, dest="re", default=0.0125,
-            help="Reynolds number of flow."
-        )
-        group.add_argument(
-            "--remesh", action="store", type=float, dest="remesh", default=0,
-            help="Remeshing frequency (setting it to zero disables it)."
-        )
+        # group.add_argument(
+        #     "--re", action="store", type=float, dest="re", default=0.0125,
+        #     help="Reynolds number of flow."
+        # )
+
+        group.add_argument("--N", action="store", type=int, dest="N",
+                           default=10,
+                           help="Number of particles in diamter of a rigid cylinder")
+
+        # group.add_argument(
+        #     "--remesh", action="store", type=float, dest="remesh", default=0,
+        #     help="Remeshing frequency (setting it to zero disables it)."
+        # )
 
     def consume_user_options(self):
         # ======================
         # Get the user options and save them
         # ======================
-        self.re = self.options.re
+        # self.re = self.options.re
         # ======================
         # ======================
 
@@ -123,12 +128,13 @@ class Problem(Application):
         # Numerical properties
         # ======================
         self.hdx = 1.
-        self.dx = self.rigid_body_diameter / 8
+        self.N = self.options.N
+        self.dx = self.rigid_body_diameter / self.N
         self.h = self.hdx * self.dx
         self.vref = np.sqrt(2. * abs(self.gy) * self.fluid_height)
         self.c0 = 10 * self.vref
         self.mach_no = self.vref / self.c0
-        self.nu = 0.00
+        self.nu = self.options.nu
         self.tf = 0.9
         self.p0 = self.fluid_rho*self.c0**2
         self.alpha = 0.02
@@ -142,7 +148,9 @@ class Problem(Application):
         print("dt_cfl", dt_cfl, "dt_viscous", dt_viscous, "dt_force", dt_force)
 
         self.dt = min(dt_cfl, dt_force)
+        print("Computed stable dt is: ", self.dt)
         self.dt = 5e-6
+        print("But we set it to: ", self.dt)
         # ==========================
         # Numerical properties ends
         # ==========================
@@ -277,37 +285,50 @@ class Problem(Application):
 
         info = self.read_info(fname)
         files = self.output_files
-        y = []
-        v = []
+        y_current = []
+        v_current = []
         u = []
         t = []
 
         for sd, rigid_body in iter_output(files, 'rigid_body'):
             _t = sd['t']
-            y.append(rigid_body.xcm[1])
+            # if _t > 0.1:
+            y_current.append(rigid_body.xcm[1])
             u.append(rigid_body.vcm[0])
-            v.append(rigid_body.vcm[1])
+            v_current.append(rigid_body.vcm[1])
             t.append(_t)
+        t_current = np.asarray(t)
+        t_current -= 0.1
 
         # Data from literature
         path = os.path.abspath(__file__)
         directory = os.path.dirname(path)
 
         # load the data
-        data_y_vel_hashemi_2012_fem = np.loadtxt(os.path.join(
-            directory, 'hashemi_2012_falling_cylinder_fem_data.csv'), delimiter=',')
+        data_v_vel_hashemi_2012_fem = np.loadtxt(os.path.join(
+            directory, 'hashemi_2012_falling_circular_cylinder_in_closed_channel_Glowinski_2001_fem_v_vel_data.csv'), delimiter=',')
+        data_y_pos_zhang_2019_FPM_PST = np.loadtxt(os.path.join(
+            directory, 'hashemi_2012_falling_circular_cylinder_in_closed_channel_Zhang_2019_FPM_PST_y_position_data.csv'), delimiter=',')
 
-        t_has, vel_has = data_y_vel_hashemi_2012_fem[:, 0], data_y_vel_hashemi_2012_fem[:, 1]
+        t_v_vel_FEM, v_vel_FEM = data_v_vel_hashemi_2012_fem[:, 0], data_v_vel_hashemi_2012_fem[:, 1]
+        t_y_pos_FPM_PST, y_pos_FPM_PST = data_y_pos_zhang_2019_FPM_PST[:, 0], data_y_pos_zhang_2019_FPM_PST[:, 1]
 
         res = os.path.join(self.output_dir, "results.npz")
-        np.savez(res, t_has=t_has, vel_has=vel_has)
+        np.savez(res,
+                 t_v_vel_FEM=t_v_vel_FEM,
+                 v_vel_FEM=v_vel_FEM,
+                 t_y_pos_FPM_PST=t_y_pos_FPM_PST,
+                 y_pos_FPM_PST=y_pos_FPM_PST,
+                 t_current=t_current,
+                 v_current=v_current,
+                 y_current=y_current)
 
         # ========================
         # Variation of y velocity
         # ========================
         plt.clf()
-        plt.plot(t_has, vel_has, "-", label='FEM')
-        plt.plot(t, v, "o", label='Current')
+        plt.plot(t_v_vel_FEM, v_vel_FEM, "^", label='Glowinski 2001 (FEM)')
+        plt.plot(t_current, v_current, "-^", label='Current')
 
         plt.title('Variation in y-velocity')
         plt.xlabel('t')
@@ -315,9 +336,25 @@ class Problem(Application):
         plt.legend()
         fig = os.path.join(os.path.dirname(fname), "y_velocity_with_t.png")
         plt.savefig(fig, dpi=300)
+        # ============================
+        # Variation of y velocity ends
+        # ============================
         # ========================
-        # x amplitude figure
+        # Variation of y position
         # ========================
+        plt.clf()
+        plt.plot(t_y_pos_FPM_PST, y_pos_FPM_PST, "o", label='Zhang 2019 FPM PST')
+        plt.plot(t_current, y_current, "-^", label='Current')
+
+        plt.title('Variation in y-position')
+        plt.xlabel('t')
+        plt.ylabel('y-position')
+        plt.legend()
+        fig = os.path.join(os.path.dirname(fname), "y_position_with_t.png")
+        plt.savefig(fig, dpi=300)
+        # ============================
+        # Variation of y velocity ends
+        # ============================
 
 
 if __name__ == '__main__':

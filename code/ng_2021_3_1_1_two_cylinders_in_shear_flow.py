@@ -58,8 +58,12 @@ class MakeForcesZeroOnRigidBody(Equation):
 
 class Ng2021TwoBodiesInShearFlow(Application):
     def add_user_options(self, group):
+        group.add_argument("--N", action="store", type=int, dest="N",
+                           default=20,
+                           help="Number of particles in diamter of a rigid cylinder")
+
         group.add_argument(
-            "--re", action="store", type=float, dest="re", default=0.625,
+            "--re", action="store", type=float, dest="re", default=0.75,
             help="Reynolds number of flow."
         )
 
@@ -126,13 +130,14 @@ class Ng2021TwoBodiesInShearFlow(Application):
         # ======================
         self.hdx = 1.
         # self.dx = 1.0/60.0
-        self.dx = self.rigid_body_diameter / 10
+        self.N = self.options.N
+        self.dx = self.rigid_body_diameter / self.N
         self.h = self.hdx * self.dx
         self.vref = np.sqrt(2. * abs(self.gy) * self.fluid_height)
         self.c0 = 10.0 * self.Umax
         self.mach_no = self.vref / self.c0
         # set the viscosity based on the particle reynolds no
-        self.nu = self.Umax * self.rigid_body_diameter**2. / (self.fluid_height * self.re)
+        self.nu = 2. * self.Umax * (0.5 * self.rigid_body_diameter)**2. / (self.fluid_height * self.re)
         self.mu = self.nu * self.fluid_rho
         print("Kinematic viscosity is: ", self.nu)
         self.tf = 50. + 10.
@@ -293,7 +298,7 @@ class Ng2021TwoBodiesInShearFlow(Application):
             fluid, rigid_body, self.dx, dim=self.dim
         )
         add_rigid_fluid_properties_to_rigid_body(rigid_body)
-        set_linear_velocity_of_rigid_body(rigid_body, [0.1, 0., 0.])
+        # set_linear_velocity_of_rigid_body(rigid_body, [0.1, 0., 0.])
         rigid_body.m[:] = self.fluid_rho * self.dx**self.dim
         # =========================
         # create rigid body ends
@@ -334,7 +339,7 @@ class Ng2021TwoBodiesInShearFlow(Application):
             gy=self.gy,
             alpha=self.alpha)
 
-        scheme.configure_solver(tf=tf, dt=self.dt, pfreq=1000)
+        scheme.configure_solver(tf=tf, dt=self.dt, pfreq=500)
 
     def create_equations(self):
         # print("inside equations")
@@ -378,28 +383,46 @@ class Ng2021TwoBodiesInShearFlow(Application):
 
         from pysph.solver.utils import iter_output
 
-        files = output_files
+        info = self.read_info(fname)
+        files = self.output_files
 
         t = []
 
         x_cm = []
         u_cm = []
 
-        step = 10
+        step = 1
         for sd, rigid_body in iter_output(files[::step], 'rigid_body'):
             _t = sd['t']
-            print(_t)
-            x_cm.append(rigid_body.xcm[0])
-            u_cm.append(rigid_body.vcm[0])
-            t.append(_t)
+            if _t > 10:
+                print(_t)
+                x_cm.append(rigid_body.xcm[0])
+                u_cm.append(rigid_body.vcm[0])
+                t.append(_t)
+        t = np.asarray(t)
+        t -= 10.
 
-        plt.plot(t, x_cm, label="CoM x of particle")
-        plt.legend()
-        fig = os.path.join(self.output_dir, "t_vs_x_cm.png")
-        plt.savefig(fig, dpi=300)
-        plt.clf()
+        # Data from literature
+        path = os.path.abspath(__file__)
+        directory = os.path.dirname(path)
 
-        plt.plot(t, u_cm, label="U")
+        # load the data
+        # We use Hashemi SPH data for current validation
+        data_u_cm_vs_time_hashemi_sph = np.loadtxt(os.path.join(
+            directory, 'ng_2021_3_1_1_two_cylinders_in_shear_flow_SPH_hashemi_et_2012_data.csv'), delimiter=',')
+
+        t_SPH_Hashemi, u_cm_SPH_Hashemi = data_u_cm_vs_time_hashemi_sph[:, 0], data_u_cm_vs_time_hashemi_sph[:, 1]
+
+        res = os.path.join(self.output_dir, "results.npz")
+        np.savez(res,
+                 t_SPH_Hashemi=t_SPH_Hashemi,
+                 u_cm_SPH_Hashemi=u_cm_SPH_Hashemi,
+                 t_current=t,
+                 u_current=u_cm)
+        data = np.load(res)
+
+        plt.plot(t, u_cm, label="Current")
+        plt.plot(t_SPH_Hashemi, u_cm_SPH_Hashemi, label="Hashemi et al. (2012)")
         plt.legend()
         fig = os.path.join(self.output_dir, "t_vs_u_cm.png")
         plt.savefig(fig, dpi=300)

@@ -1,6 +1,9 @@
 """A neutrally buoyand circular cylinder in a shear flow
 
 Section 7.1 in Hashemi 2012 paper
+
+python hashemi_2012_neutrally_buoyant_circular_cylinder_in_shear_flow.py --openmp --no-use-edac --nu 1e-6 --alpha 0.02 --artificial-viscosity-with-boundary --pfreq 300 --internal-flow --pst
+
 """
 import os
 
@@ -22,6 +25,7 @@ from pysph.sph.scheme import SchemeChooser
 from pysph.sph.equation import Group, MultiStageEquations
 
 from geometry import hydrostatic_tank_2d, create_circle_1
+from pysph.sph.equation import Equation, Group
 from rigid_body import (get_particle_array_rigid_body,
                         set_linear_velocity_of_rigid_body,
                         set_angular_velocity,
@@ -31,6 +35,30 @@ from rigid_body import (get_particle_array_rigid_body,
                         AdjustRigidBodyPositionInPipe)
 from rigid_fluid_coupling import (ParticlesFluidScheme,
                                   add_rigid_fluid_properties_to_rigid_body)
+
+
+def check_time_make_zero(t, dt):
+    if t < 5.0:
+        return True
+    else:
+        return False
+
+
+class MakeForcesZeroOnRigidBody(Equation):
+    def initialize(self, d_idx, d_fx, d_fy, d_fz):
+        d_fx[d_idx] = 0.
+        d_fy[d_idx] = 0.
+        d_fz[d_idx] = 0.
+
+    def reduce(self, dst, t, dt):
+        frc = declare('object')
+        trq = declare('object')
+
+        frc = dst.force
+        trq = dst.torque
+
+        frc[:] = 0
+        trq[:] = 0
 
 
 class PoiseuilleFlow(Application):
@@ -114,7 +142,7 @@ class PoiseuilleFlow(Application):
         self.nu = self.Umax * self.rigid_body_diameter**2. / (self.fluid_height * self.re)
         self.mu = self.nu * self.fluid_rho
         print("Kinematic viscosity is: ", self.nu)
-        self.tf = 80.
+        self.tf = 83.
         self.p0 = self.fluid_rho*self.c0**2
         self.alpha = 0.02
 
@@ -313,6 +341,15 @@ class PoiseuilleFlow(Application):
 
         eqns.groups[0].append(Group(adjust_eqs))
 
+        # Apply external force
+        zero_frc = []
+        zero_frc.append(
+            MakeForcesZeroOnRigidBody("rigid_body", sources=None))
+
+        # print(eqns.groups)
+        eqns.groups[-1].append(Group(equations=zero_frc,
+                                         condition=check_time_make_zero))
+
         return eqns
 
     def create_tools(self):
@@ -344,12 +381,14 @@ class PoiseuilleFlow(Application):
         step = 1
         for sd, rigid_body in iter_output(files[::step], 'rigid_body'):
             _t = sd['t']
-            print(_t)
+            if _t > 3:
+                print(_t)
 
-            vertical_position_current.append(rigid_body.xcm[1])
-            u_cm.append(rigid_body.vcm[0])
-            t_current.append(_t)
-        t_currrent = np.asarray(t_current)
+                vertical_position_current.append(rigid_body.xcm[1])
+                u_cm.append(rigid_body.vcm[0])
+                t_current.append(_t)
+        t_current = np.asarray(t_current)
+        t_current -= 3.
         vertical_position_current = np.asarray(vertical_position_current)
 
         # Data from literature
