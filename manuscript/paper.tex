@@ -31,7 +31,7 @@
 \newcommand{\ten}[1]{\ensuremath{\mathbf{#1}}}
 
 \usepackage{lineno}
-\linenumbers
+% \linenumbers
 
 \journal{}
 
@@ -40,14 +40,13 @@
 \begin{frontmatter}
 
   \title{}
-  \author[IITB]{Dinesh Adepu\corref{cor1}}
+  \author[XXX]{Dinesh Adepu\corref{cor1}}
   \ead{d.dinesh@surrey.ac.uk}
   \author[XXX]{Pawan Negi \corref{cor1}}
   \ead{xxx}
   \author[University of Surrey]{Chuan Yu Wu}
-  \ead{xyz@com}
-\address[UoS]{Department of Aerospace Engineering, Indian Institute of
-  Technology Bombay, Powai, Mumbai 400076}
+  \ead{XXX}
+\address[xxx]{xxx}
 
 \cortext[cor1]{Corresponding author}
 
@@ -58,7 +57,7 @@
 
 \begin{keyword}
 %% keywords here, in the form: keyword \sep keyword
-{Elastic solids collision}, {Frictional contact}, {SPH}, {Transport Velocity Formulation}
+{xxx}, {xxx}, {xxx}
 
 %% MSC codes here, in the form: \MSC code \sep code
 %% or \MSC[2008] code \sep code (2000 is the default)
@@ -83,27 +82,60 @@
 \subsection{Plane poiseuille flow}
 \label{sec:res:ppf}
 
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/plane_poiseuille_flow_2D/case_1/comparison}
+  \caption{Velocity comparison for a 2D plane Poiseuille flow}
+\label{fig:plane_poiseuille_flow_2D-case_1-comparison}
+\end{figure}
+
+% \FloatBarrier%
+% \subsubsection{A steady hydrostatic tank}
+% First we need a steady hydrostatic tank with no particles oscillating and a no
+% pressure oscillations. I have created a files with name
+% $dinesh\_2023\_steady\_hs\_tank.py$. We will run it for a total time of $0.3$
+% seconds.
+
+
 
 \FloatBarrier%
-\subsection{Hagen-Poiseuille flow}
-\label{sec:res:hpf}
+\subsection{Circular body falling in a steady tank}
+\label{sec:res:circular-body-entry}
 
-
-\FloatBarrier%
-\subsubsection{A steady hydrostatic tank}
-First we need a steady hydrostatic tank with no particles oscillating and a no
-pressure oscillations. I have created a files with name
-$dinesh\_2023\_steady\_hs\_tank.py$. We will run it for a total time of $0.3$
-seconds.
-
-
-\FloatBarrier%
-\subsection{A neutrally buoyant circular cylinder in a shear ﬂow}
-\label{sec:res:hpf}
 % file corresponding to this example is
-% hashemi_2012_neutrally_buoyant_circular_cylinder_in_shear_flow.py
+% skillen_2013_circular_water_entry.py
 
-\citet{hashemi_modified_2012}
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/skillen_2013_water_entry_half_buoyant/penetration_vs_t}
+  \caption{Water entry half buoyant body}
+\label{fig:xxxx}
+\end{figure}
+
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/skillen_2013_water_entry_neutrally_buoyant/penetration_vs_t}
+  \caption{Water entry neutrally buoyant body}
+\label{fig:xxxx}
+\end{figure}
+
+\citet{skillen_incompressible_2013}
+
+
+\FloatBarrier%
+\subsection{2D water wedge entry}
+\label{sec:res:wedge_entry}
+
+\citet{sun_numerical_2015}
+
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/sun_2015_2d_water_wedge_entry/velocity_vs_t}
+  \caption{Velocity of the 2d water wedge entry problem}
+\label{fig:xxxx}
+\end{figure}
+% file corresponding to this example is
+% skillen_2013_forced_wedge_water_entry.py
 
 
 \FloatBarrier%
@@ -112,7 +144,14 @@ seconds.
 
 % file corresponding to this example is
 % ng_2021_3_1_1_two_cylinders_in_shear_flow.py
-\citet{xxx}
+\citet{ng_numerical_2021}
+
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/ng_2021_two_cylinders_in_shear_flow/u_cm_vs_t}
+  \caption{Two cylinders in a parallel plate flow.}
+\label{fig:xxx}
+\end{figure}
 
 
 \FloatBarrier%
@@ -124,57 +163,42 @@ seconds.
 
 \citet{hashemi_modified_2012}
 
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/hashemi_2012_falling_circular_cylinder_in_closed_channel/velocity_vs_t}
+  \caption{Velocity vs time of circular body falling in a closed tank}
+\label{fig:xxxx}
+\end{figure}
+
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/hashemi_2012_falling_circular_cylinder_in_closed_channel/position_vs_t}
+  \caption{Position vs time of circular body falling in a closed tank}
+\label{fig:xxxx}
+\end{figure}
+
 
 \FloatBarrier%
-\subsection{Circular body falling in a steady tank}
+\subsection{A neutrally buoyant circular cylinder in a shear ﬂow}
 \label{sec:res:hpf}
-
 % file corresponding to this example is
-% skillen_2013_circular_water_entry.py
-
+% hashemi_2012_neutrally_buoyant_circular_cylinder_in_shear_flow.py
 \citet{hashemi_modified_2012}
 
+\ten{TODO}
 
-\FloatBarrier%
-\subsection{2D wedge entry}
-\label{sec:res:hpf}
-
-% file corresponding to this example is
-% skillen_2013_forced_wedge_water_entry.py
-
-\citet{hashemi_modified_2012}
+% \begin{figure}[!htpb]
+%   \centering
+%   \includegraphics[width=0.6\textwidth]{figures/plane_poiseuille_flow_2D/case_1/comparison}
+%   \caption{Velocity comparison for a 2D plane Poiseuille flow}
+% \label{fig:plane_poiseuille_flow_2D-case_1-comparison}
+% \end{figure}
 
 
 \FloatBarrier%
 \section{Conclusions}
 \label{sec:conclusions}
 
-In this paper we have demonstrated a simple approach to effectively handle the
-collision between elastic solids modeled using an updated Lagrangian SPH
-model. A contact force model is used to handle the collision between bodies. A
-surface aware spring based contact force is used to handle the collision
-between bodies. This effectively allows us to model collision and friction
-accurately. In addition this eliminates any spurious forces that are commonly
-seen with SPH when two bodies are nearby but not in actual contact. The
-contact force model utilized in the current work is sensitive towards the
-primary and the secondary body chosen. A careful analysis is carried out to
-understand which body is to be considered as primary among the colliding
-solids, and it is found that choosing the body with the highest curvature as
-the primary body gives the best results. Further, we have made our
-implementation open-source.
-
-It has been demonstrated that the current model is able to predict the post
-collision behaviour of the colliding bodies by simulating collision between
-flat, and curved interfaces in two and three dimensions. A sliding elastic
-body is simulated to test the frictional part of the contact model. Finally,
-the full scale model is applied to model the stress propagation in granular
-discs for the first time in SPH. The results compare well with those of FEM as
-well as analytical studies.
-
-A non-linear contact force model can be implemented in the future work. The
-current work can be easily extended to the modeling of collision between
-elastic and elastic-plastic bodies. Also, the collision between the bodies
-undergoing breakage can be easily captured with the current framework.
 
 \section*{References}
 

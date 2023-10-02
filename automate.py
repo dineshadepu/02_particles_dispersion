@@ -99,6 +99,57 @@ def get_files_at_given_times_from_log(files, times, logfile):
     return result
 
 
+class PlanePoiseuilleFlow2D(Problem):
+    """
+    Pertains to Figure 14 (a)
+    """
+    def get_name(self):
+        return 'plane_poiseuille_flow_2D'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/plane_poiseuille_flow_2D.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'case_1': (dict(
+                tf=50,
+                ), 'Case 1'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.move_figures()
+
+    def move_figures(self):
+        import shutil
+        import os
+
+        for name in self.case_info:
+            source = self.input_path(name)
+
+            target_dir = "manuscript/figures/" + source[8:] + "/"
+            os.makedirs(target_dir)
+            # print(target_dir)
+
+            file_names = os.listdir(source)
+
+            for file_name in file_names:
+                # print(file_name)
+                if file_name.endswith((".jpg", ".pdf", ".png")):
+                    # print(target_dir)
+                    shutil.copy(os.path.join(source, file_name), target_dir)
+
+
 class Skillen2013WaterEntryHalfBuoyant(Problem):
     """
     Pertains to Figure 14 (a)
@@ -684,6 +735,8 @@ class Hashemi2012FallingCircularCylinderInClosedChannel(Problem):
 
 if __name__ == '__main__':
     PROBLEMS = [
+        # Problem  no 0 (for fluid validation)
+        PlanePoiseuilleFlow2D,
         # Problem  no 1 (500 density)
         Skillen2013WaterEntryHalfBuoyant,
         # Problem  no 1 (1000 density)
