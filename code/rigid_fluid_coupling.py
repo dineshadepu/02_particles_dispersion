@@ -21,8 +21,6 @@ from rigid_body import (SumUpExternalForces)
 
 def add_rigid_fluid_properties_to_rigid_body(pa):
     add_properties(pa, 'arho')
-    add_properties(pa, 'm_fluid')
-    add_properties(pa, 'm_frac')
     add_properties(pa, 'wij')
     add_properties(pa, 'ug', 'vf', 'uf', 'wf', 'vg', 'wg')
 

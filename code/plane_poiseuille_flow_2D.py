@@ -152,7 +152,7 @@ class PoiseuilleFlow(Application):
             return
 
         import matplotlib
-        matplotlib.use('Agg')
+        # matplotlib.use('Agg')
 
         y_ex, u_ex, y, u = self._plot_u_vs_y()
         t, ke = self._plot_ke_history()
@@ -193,12 +193,12 @@ class PoiseuilleFlow(Application):
         plt.clf()
         plt.plot(ye, ue, label="exact")
         plt.plot(y, u, 'ko', fillstyle='none', label="computed")
-        plt.xlabel('y')
-        plt.ylabel('u')
+        plt.xlabel('y (m)')
+        plt.ylabel('u (m/s)')
         plt.legend()
-        plt.title('Velocity profile at %s'%tf)
-        fig = os.path.join(self.output_dir, "comparison.png")
-        plt.savefig(fig, dpi=300)
+        plt.title('Velocity profile at %s seconds'%tf)
+        fig = os.path.join(self.output_dir, "comparison.pdf")
+        plt.savefig(fig, bbox_inches='tight', dpi=300)
         return ye, ue, y, u
 
 

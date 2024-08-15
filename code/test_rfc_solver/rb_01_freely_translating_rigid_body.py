@@ -1,6 +1,8 @@
 from __future__ import print_function
 import numpy as np
 
+import sys
+sys.path.insert(0, "./../")
 from pysph.solver.application import Application
 from pysph.sph.scheme import SchemeChooser
 
@@ -35,7 +37,7 @@ class FreelyTranslatingRigidBody(Application):
 
         # solver data
         self.tf = 1.
-        self.dt = 1e-4
+        self.dt = 1e-3
 
         self.seval = None
 
@@ -64,8 +66,8 @@ class FreelyTranslatingRigidBody(Application):
                                                    m_rb=m,
                                                    dem_id=dem_id,
                                                    body_id=body_id)
-        # set_linear_velocity_of_rigid_body(rigid_body, [1., 1., 0.])
-        # set_angular_velocity(rigid_body, [0., 0., 2 * np.pi])
+        set_linear_velocity_of_rigid_body(rigid_body, [1., 1., 0.])
+        set_angular_velocity(rigid_body, [0., 0., 2 * np.pi])
         rigid_body.h[-1] = 1.5
         return rigid_body
 
@@ -89,8 +91,70 @@ class FreelyTranslatingRigidBody(Application):
         tf = self.tf
 
         output_at_times = np.array([0., 0.5, 1.0])
-        self.scheme.configure_solver(dt=self.dt, tf=tf, pfreq=500,
+        self.scheme.configure_solver(dt=self.dt, tf=tf, pfreq=100,
                                      output_at_times=output_at_times)
+
+    def post_process(self, fname):
+        if len(self.output_files) == 0:
+            return
+
+        from pysph.solver.utils import iter_output
+
+        files = self.output_files
+        files = files[:]
+        t, total_energy = [], []
+        x, y = [], []
+        R = []
+        ang_mom = []
+        for sd, body in iter_output(files, 'rigid_body'):
+            _t = sd['t']
+            # print(_t)
+            t.append(_t)
+            total_energy.append(0.5 * np.sum(body.m[:] * (body.u[:]**2. +
+                                                          body.v[:]**2.)))
+            print("R is", body.R)
+            print("ang_mom is", body.ang_mom)
+            print("omega x is", body.omega)
+            print("moi global master ", body.inertia_tensor_inverse_global_frame)
+            print("moi body master ", body.inertia_tensor_inverse_body_frame)
+            print("moi global master ", body.inertia_tensor_global_frame)
+            print("moi body master ", body.inertia_tensor_body_frame)
+            # x.append(body.xcm[0])
+            # y.append(body.xcm[1])
+            # print(body.ang_mom_z[0])
+            ang_mom.append(body.ang_mom[2])
+            R.append(body.R[0])
+        # print(ang_mom)
+
+        import matplotlib
+        import os
+        # matplotlib.use('Agg')
+
+        from matplotlib import pyplot as plt
+
+        # res = os.path.join(self.output_dir, "results.npz")
+        # np.savez(res, t=t, amplitude=amplitude)
+
+        # gtvf data
+        # data = np.loadtxt('./oscillating_plate.csv', delimiter=',')
+        # t_gtvf, amplitude_gtvf = data[:, 0], data[:, 1]
+
+        plt.clf()
+
+        # plt.plot(t_gtvf, amplitude_gtvf, "s-", label='GTVF Paper')
+        # plt.plot(t, total_energy, "-", label='Simulated')
+        # plt.plot(t, ang_mom, "-", label='Angular momentum')
+        plt.plot(t, R, "-", label='R[0]')
+
+        plt.xlabel('t')
+        plt.ylabel('ang energy')
+        plt.legend()
+        fig = os.path.join(self.output_dir, "ang_mom_vs_t.png")
+        plt.savefig(fig, dpi=300)
+        plt.show()
+
+        # plt.plot(x, y, label='Simulated')
+        # plt.show()
 
 
 if __name__ == '__main__':

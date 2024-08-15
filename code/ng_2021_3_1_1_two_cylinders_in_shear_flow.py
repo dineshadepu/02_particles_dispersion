@@ -360,7 +360,7 @@ class Ng2021TwoBodiesInShearFlow(Application):
 
         # print(eqns.groups)
         eqns.groups[-1].append(Group(equations=zero_frc,
-                                         condition=check_time_make_zero))
+                                     condition=check_time_make_zero))
 
         return eqns
 
